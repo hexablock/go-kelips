@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -65,20 +66,41 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(reqpath, "group/") {
+		hs.handleGroup(w, strings.TrimPrefix(reqpath, "group/"))
+		return
+	}
+
+	var (
+		err error
+	)
+
 	switch r.Method {
 	case "GET":
-		nodes := hs.klp.LookupGroup([]byte(reqpath))
-		b, err := json.Marshal(nodes)
-		if err != nil {
-			w.WriteHeader(500)
-			w.Write([]byte(err.Error()))
-		} else {
-			w.Write(b)
+		nodes, er := hs.klp.Lookup([]byte(reqpath))
+		if er != nil {
+			err = er
+			break
 		}
+
+		b, er := json.Marshal(nodes)
+		if er != nil {
+			err = er
+			break
+		}
+		w.Write(b)
+
 	case "POST":
-		_, ok := hs.klp.Insert([]byte(reqpath))
-		if !ok {
-			// other group
+		hpath := strings.Split(reqpath, "/")
+		if len(hpath) != 2 {
+			err = fmt.Errorf("must be in format {host}:{ip}/{key}")
+			break
+		}
+		hp := strings.Split(hpath[0], ":")
+		var port int64
+		if port, err = strconv.ParseInt(hp[1], 10, 64); err == nil {
+			host := kelips.NewHost(hp[0], uint16(port))
+			err = hs.klp.Insert([]byte(hpath[1]), host)
 		}
 
 	default:
@@ -86,11 +108,32 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err != nil {
+		w.WriteHeader(400)
+		w.Write([]byte(`{"error": "` + err.Error() + `"}`))
+	}
+
+}
+
+func (hs *httpServer) handleGroup(w http.ResponseWriter, reqpath string) {
+	if reqpath == "" {
+		w.WriteHeader(404)
+		return
+	}
+
+	nodes := hs.klp.LookupGroup([]byte(reqpath))
+	b, err := json.Marshal(nodes)
+	if err != nil {
+		w.WriteHeader(500)
+		w.Write([]byte(err.Error()))
+	} else {
+		w.Write(b)
+	}
 }
 
 func main() {
 	flag.Parse()
-
+	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 	log.SetPrefix("| " + *advAddr + " | ")
 
 	conf, serfConf := initConf()
@@ -116,14 +159,4 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// srf := kelps.Serf()
-	// for {
-	// 	time.Sleep(15 * time.Second)
-	// 	log.Println(srf.GetCachedCoordinate(*advAddr))
-	// }
-
-	// sig := make(chan os.Signal, 1)
-	// signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	// <-sig
-	// kelps.Shutdown()
 }

@@ -1,6 +1,7 @@
 package kelips
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,13 +16,30 @@ type Host struct {
 	Port uint16
 }
 
+// NewHostFromBytes returns a new Host struct from the bytes.  The last 2 bytes
+// are the port and the remainder is the address
+func NewHostFromBytes(b []byte) *Host {
+	host := &Host{}
+	m := len(b) - 2
+	host.Port = binary.BigEndian.Uint16(b[m:])
+	host.Addr = net.IP(b[:m])
+
+	return host
+}
+
 // NewHost creates a new host with the address and port
 func NewHost(addr string, port uint16) *Host {
 	return &Host{Addr: net.ParseIP(addr), Port: port}
 }
 
-// Hostname returns the host:port string
-func (host *Host) Hostname() string {
+// Bytes returns the address bytes followed by 2 byte port
+func (host *Host) Bytes() []byte {
+	port := make([]byte, 2)
+	binary.BigEndian.PutUint16(port, host.Port)
+	return append([]byte(host.Addr), port...)
+}
+
+func (host *Host) String() string {
 	return host.Addr.String() + ":" + fmt.Sprintf("%d", host.Port)
 }
 
@@ -33,9 +51,6 @@ type Node struct {
 	ID   []byte
 	Name string
 	Tags map[string]string
-	// Run status of the node
-	Status int
-
 	// Number of heartbeats received
 	Heartbeats int
 
@@ -46,14 +61,10 @@ type Node struct {
 	LastSeen time.Time
 }
 
-func (n *Node) String() string {
-	return n.Hostname()
-}
-
 func (n *Node) init(f func() hash.Hash) {
 	h := f()
 	// Generate id from host:port
-	h.Write([]byte(n.Hostname()))
+	h.Write([]byte(n.String()))
 	sh := h.Sum(nil)
 	n.ID = sh[:]
 }
@@ -64,7 +75,6 @@ func (n Node) MarshalJSON() ([]byte, error) {
 		ID         string
 		Name       string
 		Tags       map[string]string
-		Status     int
 		Host       string
 		Heartbeats int
 		RTT        string
@@ -73,8 +83,7 @@ func (n Node) MarshalJSON() ([]byte, error) {
 		hex.EncodeToString(n.ID),
 		n.Name,
 		n.Tags,
-		n.Status,
-		n.Hostname(),
+		n.String(),
 		n.Heartbeats,
 		n.RTT.String(),
 		n.LastSeen,

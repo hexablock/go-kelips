@@ -2,10 +2,17 @@ package kelips
 
 import (
 	"log"
-	"strings"
+	"time"
 
 	"github.com/hashicorp/serf/serf"
 )
+
+// TupleStore implements a store for a mapping of files to hosts
+type TupleStore interface {
+	Add(name string, host *Host) bool
+	Get(name string) []*Host
+	Del(name string, host *Host) bool
+}
 
 // Kelips is the core kelips struct that maintains the internal state
 type Kelips struct {
@@ -27,28 +34,29 @@ type Kelips struct {
 	// All affinity groups in the dht
 	groups affinityGroups
 
-	// File tuples for this node
-	tuples *filetuples
+	// file or key tuples
+	tuples TupleStore
 
 	// Events received via gossip used to to update state
 	events chan serf.Event
 
 	// Channel to block for completion
 	stopped chan struct{}
+
+	trans Transport
 }
 
 // NewKelips initializes serf and starts the event handlers
 func NewKelips(conf *Config, serfConf *serf.Config) (*Kelips, error) {
 	mc := serfConf.MemberlistConfig
+	node := Node{Host: NewHost(mc.AdvertiseAddr, uint16(mc.AdvertisePort))}
 	k := &Kelips{
-		node: Node{
-			Host: NewHost(mc.AdvertiseAddr, uint16(mc.AdvertisePort)),
-		},
+		node:     node,
 		conf:     conf,
 		serfConf: serfConf,
 		events:   make(chan serf.Event, 64),
 		stopped:  make(chan struct{}, 1),
-		tuples:   newFiletuples(),
+		tuples:   NewInmemTuples(),
 	}
 	k.init()
 
@@ -58,8 +66,13 @@ func NewKelips(conf *Config, serfConf *serf.Config) (*Kelips, error) {
 	}
 
 	k.serf = s
+	k.trans = NewSerfTransport(s)
+	for _, v := range k.groups {
+		v.trans = k.trans
+	}
 
 	go k.handleEvents()
+	go k.checkNodes()
 
 	return k, nil
 }
@@ -81,38 +94,77 @@ func (kelps *Kelips) init() {
 		group.index, kelps.node.ID, len(kelps.groups))
 }
 
+func (kelps *Kelips) checkNodes() {
+	for {
+		time.Sleep(kelps.conf.HeartbeatInterval)
+		for _, grp := range kelps.groups {
+			grp.checkNodes()
+		}
+	}
+}
+
 // LookupGroup hashes a key and returning the associated group
 func (kelps *Kelips) LookupGroup(key []byte) AffinityGroup {
 	h := kelps.conf.HashFunc()
 	h.Write(key)
 	sh := h.Sum(nil)
 
-	log.Printf("%x", sh)
 	return kelps.groups.get(sh[:])
 }
 
-// Insert looks up the affinity group and inserts the key.  If the affinity os
-// foreign it returns the affinity group and false otherwise it addes the key
-// and returns the affinity group along with true
-func (kelps *Kelips) Insert(key []byte) (group AffinityGroup, ok bool) {
-	group = kelps.LookupGroup(key)
+func (kelps *Kelips) getTupleNodes(grp AffinityGroup, key []byte) []Node {
+	hosts := kelps.tuples.Get(string(key))
 
-	nodes := group.Nodes()
-	var n string
-	for _, v := range nodes {
-		n += v.Hostname() + " "
-	}
-	log.Printf("[DEBUG] Insertion candidates='%s'", strings.TrimSuffix(n, " "))
-
-	if group.Index() != kelps.idx {
-		return
+	nodes := make([]Node, 0, len(hosts))
+	for _, h := range hosts {
+		if n, ok := grp.GetNode(h.String()); ok {
+			nodes = append(nodes, n)
+		}
 	}
 
-	kelps.tuples.add(string(key), kelps.node.Host)
-	log.Printf("[DEBUG] Inserting key=%s host=%s", key, kelps.conf.Hostname)
-	ok = true
+	return nodes
+}
 
-	return
+// Lookup does a local lookup and returns all nodes that have the key.  If the
+// key is not found no nodes are returned
+func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
+	grp := kelps.LookupGroup(key)
+
+	var (
+		nodes []Node
+		err   error
+	)
+
+	if grp.Index() == kelps.idx {
+		// We own the key - return nodes we have for it
+		nodes = kelps.getTupleNodes(grp, key)
+
+	} else {
+		n := grp.Nodes()
+		// Filter by nodes in the group
+		filter := make([]string, 0, len(n))
+		for _, v := range n {
+			filter = append(filter, v.Name)
+		}
+
+		nodes, err = kelps.trans.Lookup(key, filter...)
+	}
+
+	return nodes, err
+}
+
+// Insert hashes the key and inserts the key host pair into the associated
+// affinity group.  If the local node is part of the group the tuple is stored.
+// The insert is then broadcasted to the network.
+func (kelps *Kelips) Insert(key []byte, host *Host) error {
+	grp := kelps.LookupGroup(key)
+
+	if grp.Index() == kelps.idx {
+		// Add to our local store as we are in the group
+		kelps.tuples.Add(string(key), host)
+	}
+	// Broadcast the insert to the network.
+	return kelps.trans.Insert(key, host)
 }
 
 // Join issues a join to the gossip network
@@ -136,10 +188,5 @@ func (kelps *Kelips) Leave() error {
 // should be called before this for a clean shutdown.
 func (kelps *Kelips) Shutdown() error {
 	err := kelps.serf.Shutdown()
-	//<-kelps.serf.ShutdownCh()
-
-	//close(kelps.events)
-	//<-kelps.stopped
-
 	return err
 }

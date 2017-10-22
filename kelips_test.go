@@ -12,15 +12,12 @@ import (
 func newTestConfig() *serf.Config {
 	config := serf.DefaultConfig()
 	config.Init()
-	//config.MemberlistConfig.BindAddr = testutil.GetBindAddr().String()
 
 	// Set probe intervals that are aggressive for finding bad nodes
 	config.MemberlistConfig.GossipInterval = 5 * time.Millisecond
 	config.MemberlistConfig.ProbeInterval = 50 * time.Millisecond
 	config.MemberlistConfig.ProbeTimeout = 25 * time.Millisecond
 	config.MemberlistConfig.SuspicionMult = 1
-
-	//config.NodeName = fmt.Sprintf("Node %s", config.MemberlistConfig.BindAddr)
 
 	// Set a short reap interval so that it can run during the test
 	config.ReapInterval = 1 * time.Second
@@ -41,6 +38,7 @@ func newTestKelips(host string, port int, joins ...string) (*Kelips, error) {
 	conf := DefaultConfig()
 	conf.NumAffinityGroups = 2
 	conf.Hostname = fmt.Sprintf("%s:%d", host, port)
+	conf.HeartbeatInterval = 1 * time.Second
 
 	serfConf := newTestConfig()
 	serfConf.NodeName = conf.Hostname
@@ -167,10 +165,6 @@ func Test_Kelips_Lookup(t *testing.T) {
 		t.Error("no nodes found")
 	}
 
-	// for _, v := range k1.groups {
-	// 	t.Log(v.index, len(v.m))
-	// }
-
 	n2 := k2.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
 	if len(n2) != len(n1) {
 		t.Error("lookup length mismatch")
@@ -181,14 +175,39 @@ func Test_Kelips_Lookup(t *testing.T) {
 		t.Error("nothing for key")
 	}
 
-	if _, ok := k0.Insert([]byte("key")); ok {
-		t.Fatal("insert should be false")
+	// Insert
+	if err = k0.Insert([]byte("key"), NewHost("127.0.0.1", 12458)); err != nil {
+		t.Fatal(err)
 	}
 
-	if _, ok := k0.Insert([]byte("127.0.0.1:33458")); !ok {
-		t.Fatal("failed to insert")
+	<-time.After(100 * time.Millisecond)
+	nodes, err := k2.Lookup([]byte("key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) == 0 {
+		t.Fatal("should have nodes")
+	}
+	var found bool
+	for _, v := range nodes {
+		if v.String() == "127.0.0.1:12458" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("should be found")
 	}
 
+	// Forwarded lookup
+	l4, err := k0.Lookup([]byte("key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l4) != len(nodes) {
+		t.Errorf("node count mismatch want=%d have=%d", len(nodes), len(l4))
+	}
+
+	// Leave
 	if err = k0.Leave(); err != nil {
 		t.Error(err)
 	}
@@ -212,18 +231,14 @@ func Test_Kelips_Lookup(t *testing.T) {
 		t.Fatal("should have same as leave")
 	}
 
-	for _, v := range nf {
-		t.Log("AFTER", v.Status)
+	if err = k2.Leave(); err != nil {
+		t.Error(err)
 	}
+	k2.Shutdown()
 
-	// if err = k2.Leave(); err != nil {
-	// 	t.Error(err)
-	// }
-	// k2.Shutdown()
-	//
-	// if err = k3.Leave(); err != nil {
-	// 	t.Error(err)
-	// }
-	// k3.Shutdown()
+	if err = k3.Leave(); err != nil {
+		t.Error(err)
+	}
+	k3.Shutdown()
 
 }

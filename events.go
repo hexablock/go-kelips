@@ -4,77 +4,17 @@ import (
 	"log"
 	"time"
 
+	msgpack "gopkg.in/vmihailenco/msgpack.v2"
+
 	"github.com/hashicorp/serf/serf"
 )
 
-func (kelps *Kelips) initNode(mem serf.Member) *Node {
-	nd := &Node{
-		Name:       mem.Name,
-		Tags:       mem.Tags,
-		Status:     int(mem.Status),
-		Host:       &Host{mem.Addr, mem.Port},
-		Heartbeats: 1,
-	}
-	nd.init(kelps.conf.HashFunc)
-	return nd
-}
-
-// handleJoinEvent adds the nodes to their associated affinity groups.  It
-// returns the last encountered error
-func (kelps *Kelips) handleJoinEvent(event serf.MemberEvent) (err error) {
-	for _, mem := range event.Members {
-		nd := kelps.initNode(mem)
-		nd.LastSeen = time.Now()
-
-		group := kelps.groups.get(nd.ID)
-		if er := group.addNode(nd); err != nil {
-			err = er
-		}
-	}
-	return
-}
-
-// handleMemFailed removes the failed node from its associated AffinityGroup.
-// It returns the last encountered error
-func (kelps *Kelips) handleMemLeft(event serf.MemberEvent) (err error) {
-	for _, mem := range event.Members {
-		nd := kelps.initNode(mem)
-		//log.Println(nd.Status)
-		group := kelps.groups.get(nd.ID)
-		if er := group.removeNode(nd.Hostname()); er != nil {
-			err = er
-		}
-	}
-	//
-	// TODO: reconcile
-	//
-	return
-}
-
-func (kelps *Kelips) handleMemFailed(event serf.MemberEvent) (err error) {
-	for _, mem := range event.Members {
-		nd := kelps.initNode(mem)
-		group := kelps.groups.get(nd.ID)
-		if er := group.removeNode(nd.Hostname()); er != nil {
-			err = er
-		}
-	}
-	//
-	// TODO: reconcile
-	//
-	return
-}
-
-func (kelps *Kelips) handleUserEvent(evt serf.UserEvent) error {
-	log.Println(evt)
-	log.Printf("USER: %s", evt.Payload)
-	return nil
-}
-
-func (kelps *Kelips) handleQuery(query *serf.Query) error {
-	log.Println(query)
-	return nil
-}
+const (
+	// lookup request
+	queryLookup = "lookup"
+	// insert was made
+	userInsert = "insert"
+)
 
 func (kelps *Kelips) handleEvents() {
 	var err error
@@ -89,23 +29,19 @@ func (kelps *Kelips) handleEvents() {
 
 		case serf.EventUser:
 			evt := event.(serf.UserEvent)
-			err = kelps.handleUserEvent(evt)
+			err = kelps.handleUser(evt)
 
 		case serf.EventMemberJoin:
 			evt := event.(serf.MemberEvent)
-			err = kelps.handleJoinEvent(evt)
+			err = kelps.handleJoin(evt)
 
-		case serf.EventMemberFailed:
+		case serf.EventMemberFailed, serf.EventMemberLeave:
 			evt := event.(serf.MemberEvent)
-			err = kelps.handleMemFailed(evt)
-
-		case serf.EventMemberLeave:
-			evt := event.(serf.MemberEvent)
-			err = kelps.handleMemLeft(evt)
+			err = kelps.handleMemLeftOrFailed(evt)
 
 		case serf.EventMemberReap, serf.EventMemberUpdate:
 			evt := event.(serf.MemberEvent)
-			log.Println(typ, event, evt.Members)
+			log.Println("[DEBUG]", typ, event, evt.Members)
 		}
 
 		if err != nil {
@@ -115,4 +51,89 @@ func (kelps *Kelips) handleEvents() {
 	}
 
 	kelps.stopped <- struct{}{}
+}
+
+func (kelps *Kelips) newNode(mem serf.Member) *Node {
+	nd := &Node{
+		Name:       mem.Name,
+		Tags:       mem.Tags,
+		Host:       &Host{mem.Addr, mem.Port},
+		LastSeen:   time.Now(),
+		Heartbeats: 1,
+	}
+	nd.init(kelps.conf.HashFunc)
+	return nd
+}
+
+// handleJoin adds the nodes to their associated affinity groups.  It
+// returns the last encountered error
+func (kelps *Kelips) handleJoin(event serf.MemberEvent) (err error) {
+	for _, mem := range event.Members {
+
+		node := kelps.newNode(mem)
+		group := kelps.groups.get(node.ID)
+		if er := group.addNode(node); err != nil {
+			err = er
+		}
+
+	}
+	return
+}
+
+// handleMemLeftOrFailed removes the failed node from its associated AffinityGroup.
+// It returns the last encountered error
+func (kelps *Kelips) handleMemLeftOrFailed(event serf.MemberEvent) (err error) {
+	for _, mem := range event.Members {
+
+		node := kelps.newNode(mem)
+		group := kelps.groups.get(node.ID)
+		if er := group.removeNode(node.String()); er != nil {
+			err = er
+		}
+
+	}
+
+	return
+}
+
+func (kelps *Kelips) handleUser(evt serf.UserEvent) error {
+	typ := evt.Name
+	switch typ {
+
+	case userInsert:
+		data := evt.Payload
+		pos := len(data) - 18
+
+		key := data[:pos]
+		group := kelps.LookupGroup(key)
+		if group.Index() == kelps.idx {
+			host := NewHostFromBytes(data[pos:])
+			kelps.tuples.Add(string(key), host)
+		}
+
+	}
+
+	return nil
+}
+
+func (kelps *Kelips) handleQuery(query *serf.Query) error {
+	typ := query.Name
+	switch typ {
+
+	case queryLookup:
+		group := kelps.LookupGroup(query.Payload)
+		// Only process if we are in the group
+		if group.Index() != kelps.idx {
+			break
+		}
+
+		nodes := kelps.getTupleNodes(group, query.Payload)
+		buf, err := msgpack.Marshal(nodes)
+		if err != nil {
+			return err
+		}
+
+		return query.Respond(buf)
+	}
+	return nil
 }

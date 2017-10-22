@@ -18,10 +18,17 @@ func Test_Node(t *testing.T) {
 		t.Fatal("id nil")
 	}
 
-	if n.Hostname() != "127.0.0.1:10000" {
-		t.Fatal("wrong hostname", n.Hostname())
-	}
-	if n.String() != n.Hostname() {
+	if n.String() != "127.0.0.1:10000" {
 		t.Fatal("wrong hostname", n.String())
+	}
+	if n.String() != n.String() {
+		t.Fatal("wrong hostname", n.String())
+	}
+
+	b := n.Bytes()
+
+	h1 := NewHostFromBytes(b)
+	if n.String() != h1.String() {
+		t.Fatal(n.String(), h1.String())
 	}
 }

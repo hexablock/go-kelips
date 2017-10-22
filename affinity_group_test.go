@@ -19,7 +19,7 @@ func Test_AffinityGroup(t *testing.T) {
 		if v.ID() == nil {
 			t.Error("id should not be nil")
 		}
-		if bytes.Compare(v.id, zero) == 0 {
+		if bytes.Compare(v.ID(), zero) == 0 {
 			t.Fatal("should not be zero")
 		}
 		if v.Index() != (i + 1) {

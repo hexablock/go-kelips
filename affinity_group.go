@@ -20,6 +20,7 @@ type AffinityGroup interface {
 	ID() []byte
 	Index() int
 	Nodes() []Node
+	GetNode(hostname string) (Node, bool)
 }
 
 // affinityGroup is a partial view of the nodes part of a given affinity group
@@ -31,6 +32,8 @@ type affinityGroup struct {
 	// nodes part of the affinity group
 	mu sync.RWMutex
 	m  map[string]*Node
+
+	trans Transport
 }
 
 func newAffinityGroup(id []byte, index int) *affinityGroup {
@@ -51,14 +54,24 @@ func (group *affinityGroup) Index() int {
 	return group.index
 }
 
-func (group *affinityGroup) Nodes() []Node {
+func (group *affinityGroup) GetNode(hostname string) (Node, bool) {
 	group.mu.RLock()
 	defer group.mu.RUnlock()
 
+	n, ok := group.m[hostname]
+	if ok {
+		return *n, ok
+	}
+	return Node{}, false
+}
+
+func (group *affinityGroup) Nodes() []Node {
+	group.mu.RLock()
 	n := make([]Node, 0, len(group.m))
 	for _, node := range group.m {
 		n = append(n, *node)
 	}
+	group.mu.RUnlock()
 	return n
 }
 
@@ -101,31 +114,10 @@ func (group *affinityGroup) removeNode(hostname string) error {
 	return nil
 }
 
-//
-// func (group *affinityGroup) failNode(hostname string, status int) error {
-//
-// 	group.mu.RLock()
-// 	n, ok := group.m[hostname]
-// 	if !ok {
-// 		group.mu.RUnlock()
-// 		return errNodeNotFound
-// 	}
-// 	group.mu.RUnlock()
-//
-// 	group.mu.Lock()
-// 	n.Status = status
-// 	group.m[hostname] = n
-// 	group.mu.Unlock()
-//
-// 	log.Printf("[INFO] Node failed group=%d count=%d host=%s status=%d", group.index,
-// 		len(group.m), hostname, n.Status)
-// 	return nil
-// }
-
 func (group *affinityGroup) addNode(node *Node) error {
 
 	group.mu.RLock()
-	if _, ok := group.m[node.Hostname()]; ok {
+	if _, ok := group.m[node.String()]; ok {
 		group.mu.RUnlock()
 		return fmt.Errorf("node exists")
 	}
@@ -133,10 +125,10 @@ func (group *affinityGroup) addNode(node *Node) error {
 
 	group.mu.Lock()
 	node.Heartbeats = 1
-	group.m[node.Hostname()] = node
+	group.m[node.String()] = node
 	group.mu.Unlock()
 
-	log.Printf("[INFO] Node added group=%d count=%d host=%s", group.index, len(group.m), node.Hostname())
+	log.Printf("[INFO] Node added group=%d count=%d host=%s", group.index, len(group.m), node.String())
 
 	return nil
 }
@@ -164,4 +156,18 @@ func (group *affinityGroup) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(g)
+}
+
+func (group *affinityGroup) checkNodes() {
+	group.mu.Lock()
+	for k, v := range group.m {
+		rtt := group.trans.Ping(v)
+		if rtt != 0 {
+			v.RTT = rtt
+			v.Heartbeats++
+			v.LastSeen = time.Now()
+			group.m[k] = v
+		}
+	}
+	group.mu.Unlock()
 }
