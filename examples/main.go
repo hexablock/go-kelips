@@ -149,7 +149,7 @@ func main() {
 	peers := parsePeers()
 	if len(peers) > 0 {
 		log.Println("Joining", *joinAddrs)
-		if err = kelps.Join(peers); err != nil {
+		if err = kelps.Join(peers...); err != nil {
 			log.Fatal(err)
 		}
 	}

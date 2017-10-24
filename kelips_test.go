@@ -57,7 +57,7 @@ func newTestKelips(host string, port int, joins ...string) (*Kelips, error) {
 	}
 
 	if len(joins) > 0 {
-		err = kelps.Join(joins)
+		err = kelps.Join(joins...)
 	}
 
 	return kelps, err

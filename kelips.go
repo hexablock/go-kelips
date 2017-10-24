@@ -14,6 +14,15 @@ type TupleStore interface {
 	Del(name string, host *Host) bool
 }
 
+// Transport needed by kelips
+type Transport interface {
+	Ping(node *Node) time.Duration
+	// Insert a key-host association
+	Insert(key []byte, host *Host) error
+	// Lookup a key on the optional hosts
+	Lookup(key []byte, hosts ...string) ([]Node, error)
+}
+
 // Kelips is the core kelips struct that maintains the internal state
 type Kelips struct {
 	// Local node information
@@ -112,19 +121,6 @@ func (kelps *Kelips) LookupGroup(key []byte) AffinityGroup {
 	return kelps.groups.get(sh[:])
 }
 
-func (kelps *Kelips) getTupleNodes(grp AffinityGroup, key []byte) []Node {
-	hosts := kelps.tuples.Get(string(key))
-
-	nodes := make([]Node, 0, len(hosts))
-	for _, h := range hosts {
-		if n, ok := grp.GetNode(h.String()); ok {
-			nodes = append(nodes, n)
-		}
-	}
-
-	return nodes
-}
-
 // Lookup does a local lookup and returns all nodes that have the key.  If the
 // key is not found no nodes are returned
 func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
@@ -168,7 +164,7 @@ func (kelps *Kelips) Insert(key []byte, host *Host) error {
 }
 
 // Join issues a join to the gossip network
-func (kelps *Kelips) Join(existing []string) error {
+func (kelps *Kelips) Join(existing ...string) error {
 	_, err := kelps.serf.Join(existing, false)
 	return err
 }
@@ -189,4 +185,17 @@ func (kelps *Kelips) Leave() error {
 func (kelps *Kelips) Shutdown() error {
 	err := kelps.serf.Shutdown()
 	return err
+}
+
+func (kelps *Kelips) getTupleNodes(grp AffinityGroup, key []byte) []Node {
+	hosts := kelps.tuples.Get(string(key))
+
+	nodes := make([]Node, 0, len(hosts))
+	for _, h := range hosts {
+		if n, ok := grp.GetNode(h.String()); ok {
+			nodes = append(nodes, n)
+		}
+	}
+
+	return nodes
 }
