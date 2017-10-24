@@ -33,11 +33,15 @@ func newTestConfig() *serf.Config {
 	return config
 }
 
-func newTestKelips(host string, port int, joins ...string) (*Kelips, error) {
+type testServer struct {
+	trans *SerfTransport
+	klp   *Kelips
+}
 
-	conf := DefaultConfig()
+func newTestServer(host string, port int, joins ...string) (*testServer, error) {
+
+	conf := DefaultConfig(fmt.Sprintf("%s:%d", host, port))
 	conf.NumAffinityGroups = 2
-	conf.Hostname = fmt.Sprintf("%s:%d", host, port)
 	conf.HeartbeatInterval = 1 * time.Second
 
 	serfConf := newTestConfig()
@@ -51,137 +55,144 @@ func newTestKelips(host string, port int, joins ...string) (*Kelips, error) {
 	serfConf.MemberlistConfig.BindPort = port
 	serfConf.MemberlistConfig.LogOutput = ioutil.Discard
 
-	kelps, err := NewKelips(conf, serfConf)
+	srf, err := NewSerfTransport(serfConf)
+	if err != nil {
+		return nil, err
+	}
+
+	kelps, err := NewKelips(conf, srf)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(joins) > 0 {
-		err = kelps.Join(joins...)
+		err = srf.Join(joins...)
 	}
 
-	return kelps, err
+	ts := &testServer{trans: srf, klp: kelps}
+
+	return ts, err
 }
 
 func Test_Kelips_Shutdown(t *testing.T) {
 	peers := []string{"127.0.0.1:23456", "127.0.0.1:23457"}
 
-	k0, err := newTestKelips("127.0.0.1", 23456)
+	k0, err := newTestServer("127.0.0.1", 23456)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	k1, err := newTestKelips("127.0.0.1", 23457, peers...)
+	k1, err := newTestServer("127.0.0.1", 23457, peers...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	k2, err := newTestKelips("127.0.0.1", 23458, peers...)
+	k2, err := newTestServer("127.0.0.1", 23458, peers...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	k3, err := newTestKelips("127.0.0.1", 23459, peers...)
+	k3, err := newTestServer("127.0.0.1", 23459, peers...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if k2.Serf() == nil {
+	if k2.trans.Serf() == nil {
 		t.Fatal("serf should be set")
 	}
 
-	if err = k0.serf.UserEvent("k0", []byte("foobar"), false); err != nil {
+	if err = k0.trans.serf.UserEvent("k0", []byte("foobar"), false); err != nil {
 		t.Error(err)
 	}
 
-	if err = k1.serf.UserEvent("k1", []byte("foobar"), false); err != nil {
+	if err = k1.trans.serf.UserEvent("k1", []byte("foobar"), false); err != nil {
 		t.Error(err)
 	}
-	if err = k2.serf.UserEvent("k2", []byte("foobar"), false); err != nil {
+	if err = k2.trans.serf.UserEvent("k2", []byte("foobar"), false); err != nil {
 		t.Error(err)
 	}
 
 	var params *serf.QueryParam
-	if _, err = k1.serf.Query("127.0.0.1:23459", []byte{}, params); err != nil {
+	if _, err = k1.trans.serf.Query("127.0.0.1:23459", []byte{}, params); err != nil {
 		t.Fatal(err)
 	}
 
 	<-time.After(2 * time.Second)
 
-	if err = k0.Leave(); err != nil {
+	if err = k0.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k0.Shutdown()
+	k0.trans.serf.Shutdown()
 
-	if err = k1.Leave(); err != nil {
+	if err = k1.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k1.Shutdown()
+	k1.trans.serf.Shutdown()
 
-	if err = k2.Leave(); err != nil {
+	if err = k2.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k2.Shutdown()
+	k2.trans.serf.Shutdown()
 
-	if err = k3.Leave(); err != nil {
+	if err = k3.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k3.Shutdown()
+	k3.trans.serf.Shutdown()
 
 }
 
 func Test_Kelips_Lookup(t *testing.T) {
 	peers := []string{"127.0.0.1:33456", "127.0.0.1:33457"}
 
-	k0, err := newTestKelips("127.0.0.1", 33456)
+	k0, err := newTestServer("127.0.0.1", 33456)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	k1, err := newTestKelips("127.0.0.1", 33457, peers...)
+	k1, err := newTestServer("127.0.0.1", 33457, peers...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	k2, err := newTestKelips("127.0.0.1", 12458, peers...)
+	k2, err := newTestServer("127.0.0.1", 12458, peers...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	k3, err := newTestKelips("127.0.0.1", 33459, peers...)
+	k3, err := newTestServer("127.0.0.1", 33459, peers...)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	<-time.After(1 * time.Second)
 
-	n0 := k0.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
+	n0 := k0.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
 	if len(n0) == 0 {
 		t.Error("no nodes found")
 	}
 
-	n1 := k1.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
+	n1 := k1.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
 	if len(n1) == 0 {
 		t.Error("no nodes found")
 	}
 
-	n2 := k2.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
+	n2 := k2.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
 	if len(n2) != len(n1) {
 		t.Error("lookup length mismatch")
 	}
 
-	n3 := k3.LookupGroup([]byte("key")).Nodes()
+	n3 := k3.klp.LookupGroup([]byte("key")).Nodes()
 	if len(n3) == 0 {
 		t.Error("nothing for key")
 	}
 
 	// Insert
-	if err = k0.Insert([]byte("key"), NewHost("127.0.0.1", 12458)); err != nil {
+	if err = k0.klp.Insert([]byte("key"), NewHost("127.0.0.1", 12458)); err != nil {
 		t.Fatal(err)
 	}
 
 	<-time.After(100 * time.Millisecond)
-	nodes, err := k2.Lookup([]byte("key"))
+	nodes, err := k2.klp.Lookup([]byte("key"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +210,7 @@ func Test_Kelips_Lookup(t *testing.T) {
 	}
 
 	// Forwarded lookup
-	l4, err := k0.Lookup([]byte("key"))
+	l4, err := k0.klp.Lookup([]byte("key"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,37 +219,37 @@ func Test_Kelips_Lookup(t *testing.T) {
 	}
 
 	// Leave
-	if err = k0.Leave(); err != nil {
+	if err = k0.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k0.Shutdown()
-	<-k0.serf.ShutdownCh()
+	k0.trans.serf.Shutdown()
+	<-k0.trans.serf.ShutdownCh()
 	// Check graceful leave
 	<-time.After(100 * time.Millisecond)
-	nj := k2.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
+	nj := k2.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
 	if len(nj) >= len(n2) {
 		t.Error("should have less than", len(nj))
 	}
 
 	// Force shutdown
-	k1.Shutdown()
-	<-k1.serf.ShutdownCh()
+	k1.trans.serf.Shutdown()
+	<-k1.trans.serf.ShutdownCh()
 
 	// Check force shutdown
 	<-time.After(1 * time.Second)
-	nf := k2.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
+	nf := k2.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
 	if len(nf) != len(nj) {
 		t.Fatal("should have same as leave")
 	}
 
-	if err = k2.Leave(); err != nil {
+	if err = k2.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k2.Shutdown()
+	k2.trans.serf.Shutdown()
 
-	if err = k3.Leave(); err != nil {
+	if err = k3.trans.serf.Leave(); err != nil {
 		t.Error(err)
 	}
-	k3.Shutdown()
+	k3.trans.serf.Shutdown()
 
 }

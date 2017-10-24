@@ -9,19 +9,60 @@ import (
 	"github.com/hashicorp/serf/serf"
 )
 
+// AffinityGroupRPC implements RPC's used by the network transport to serve
+// requests
+type AffinityGroupRPC interface {
+	AddNode(node *Node) error
+	RemoveNode(host string) error
+	AddTuple(name string, host *Host)
+	GetTuples(key []byte) []Node
+}
+
 // SerfTransport implements a Transport interface using serf for gossip
 type SerfTransport struct {
-	serf         *serf.Serf
+	serfConf *serf.Config
+	serf     *serf.Serf
+
 	queryTimeout time.Duration
+
+	local AffinityGroupRPC
+
+	events chan serf.Event
+
+	// write to this channel to initiate shutdown
+	shutdown chan struct{}
 }
 
 // NewSerfTransport inits a new serf backed gossip transport with a default
 // query timeout of 3 seconds
-func NewSerfTransport(srf *serf.Serf) *SerfTransport {
-	return &SerfTransport{
-		serf:         srf,
+func NewSerfTransport(serfConf *serf.Config) (*SerfTransport, error) {
+	trans := &SerfTransport{
+		events:       make(chan serf.Event, 64),
+		serfConf:     serfConf,
 		queryTimeout: 3 * time.Second,
 	}
+	trans.serfConf.EventCh = trans.events
+
+	s, err := serf.Create(serfConf)
+	if err != nil {
+		return nil, err
+	}
+	trans.serf = s
+
+	go trans.handleEvents()
+
+	return trans, nil
+}
+
+// Join tries to the the given peers
+func (trans *SerfTransport) Join(peers ...string) error {
+	_, err := trans.serf.Join(peers, true)
+	return err
+}
+
+// Serf returns the underlying serf instance
+func (trans *SerfTransport) Serf() *serf.Serf {
+	return trans.serf
 }
 
 // Ping gets the coordinates of the remote and local node and retursn the
@@ -44,6 +85,11 @@ func (trans *SerfTransport) Ping(node *Node) time.Duration {
 	}
 
 	return self.DistanceTo(remote)
+}
+
+// Register registers the local rpc used to serve network requests
+func (trans *SerfTransport) Register(rpc AffinityGroupRPC) {
+	trans.local = rpc
 }
 
 // Lookup submits a lookup request to the optionally supplied nodes. If no hosts
@@ -73,6 +119,8 @@ func (trans *SerfTransport) Insert(key []byte, host *Host) error {
 	if len(hb) == 6 {
 		hb = append(make([]byte, 12), hb...)
 	}
+
+	// TODO: potentially broadcast to only group members
 
 	return trans.serf.UserEvent("insert", append(key, hb...), true)
 }

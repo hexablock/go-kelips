@@ -1,6 +1,7 @@
 package kelips
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -16,63 +17,63 @@ const (
 	userInsert = "insert"
 )
 
-func (kelps *Kelips) handleEvents() {
+func (trans *SerfTransport) handleEvents() {
 	var err error
-	for event := range kelps.events {
 
-		typ := event.EventType()
-		switch typ {
+	for {
+		select {
 
-		case serf.EventQuery:
-			evt := event.(*serf.Query)
-			err = kelps.handleQuery(evt)
+		case event := <-trans.events:
+			typ := event.EventType()
+			switch typ {
 
-		case serf.EventUser:
-			evt := event.(serf.UserEvent)
-			err = kelps.handleUser(evt)
+			case serf.EventQuery:
+				evt := event.(*serf.Query)
+				err = trans.handleQuery(evt)
 
-		case serf.EventMemberJoin:
-			evt := event.(serf.MemberEvent)
-			err = kelps.handleJoin(evt)
+			case serf.EventUser:
+				evt := event.(serf.UserEvent)
+				err = trans.handleUser(evt)
 
-		case serf.EventMemberFailed, serf.EventMemberLeave:
-			evt := event.(serf.MemberEvent)
-			err = kelps.handleMemLeftOrFailed(evt)
+			case serf.EventMemberJoin:
+				evt := event.(serf.MemberEvent)
+				err = trans.handleJoin(evt)
 
-		case serf.EventMemberReap, serf.EventMemberUpdate:
-			evt := event.(serf.MemberEvent)
-			log.Println("[DEBUG]", typ, event, evt.Members)
+			case serf.EventMemberFailed, serf.EventMemberLeave:
+				evt := event.(serf.MemberEvent)
+				err = trans.handleMemLeftOrFailed(evt)
+
+			case serf.EventMemberReap, serf.EventMemberUpdate:
+				evt := event.(serf.MemberEvent)
+				log.Println("[DEBUG]", typ, event, evt.Members)
+
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] event=%s error=%v", typ, err)
+			}
+
+		case <-trans.shutdown:
+			return
 		}
-
-		if err != nil {
-			log.Printf("[ERROR] event=%s error=%v", typ, err)
-		}
-
 	}
 
-	kelps.stopped <- struct{}{}
-}
-
-func (kelps *Kelips) newNode(mem serf.Member) *Node {
-	nd := &Node{
-		Name:       mem.Name,
-		Tags:       mem.Tags,
-		Host:       &Host{mem.Addr, mem.Port},
-		LastSeen:   time.Now(),
-		Heartbeats: 1,
-	}
-	nd.init(kelps.conf.HashFunc)
-	return nd
 }
 
 // handleJoin adds the nodes to their associated affinity groups.  It
 // returns the last encountered error
-func (kelps *Kelips) handleJoin(event serf.MemberEvent) (err error) {
+func (trans *SerfTransport) handleJoin(event serf.MemberEvent) (err error) {
 	for _, mem := range event.Members {
 
-		node := kelps.newNode(mem)
-		group := kelps.groups.get(node.ID)
-		if er := group.addNode(node); err != nil {
+		node := &Node{
+			Name:       mem.Name,
+			Tags:       mem.Tags,
+			Host:       &Host{mem.Addr, mem.Port},
+			LastSeen:   time.Now(),
+			Heartbeats: 1,
+		}
+
+		if er := trans.local.AddNode(node); er != nil {
 			err = er
 		}
 
@@ -82,12 +83,11 @@ func (kelps *Kelips) handleJoin(event serf.MemberEvent) (err error) {
 
 // handleMemLeftOrFailed removes the failed node from its associated AffinityGroup.
 // It returns the last encountered error
-func (kelps *Kelips) handleMemLeftOrFailed(event serf.MemberEvent) (err error) {
+func (trans *SerfTransport) handleMemLeftOrFailed(event serf.MemberEvent) (err error) {
 	for _, mem := range event.Members {
 
-		node := kelps.newNode(mem)
-		group := kelps.groups.get(node.ID)
-		if er := group.removeNode(node.String()); er != nil {
+		host := fmt.Sprintf("%s:%d", mem.Addr, mem.Port)
+		if er := trans.local.RemoveNode(host); er != nil {
 			err = er
 		}
 
@@ -96,44 +96,41 @@ func (kelps *Kelips) handleMemLeftOrFailed(event serf.MemberEvent) (err error) {
 	return
 }
 
-func (kelps *Kelips) handleUser(evt serf.UserEvent) error {
+func (trans *SerfTransport) handleUser(evt serf.UserEvent) error {
+	data := evt.Payload
 	typ := evt.Name
 	switch typ {
 
 	case userInsert:
-		data := evt.Payload
 		pos := len(data) - 18
 
 		key := data[:pos]
-		group := kelps.LookupGroup(key)
-		if group.Index() == kelps.idx {
-			host := NewHostFromBytes(data[pos:])
-			kelps.tuples.Add(string(key), host)
-		}
+		host := NewHostFromBytes(data[pos:])
 
+		trans.local.AddTuple(string(key), host)
 	}
 
 	return nil
 }
 
-func (kelps *Kelips) handleQuery(query *serf.Query) error {
+func (trans *SerfTransport) handleQuery(query *serf.Query) error {
 	typ := query.Name
 	switch typ {
 
 	case queryLookup:
-		group := kelps.LookupGroup(query.Payload)
-		// Only process if we are in the group
-		if group.Index() != kelps.idx {
-			break
-		}
 
-		nodes := kelps.getTupleNodes(group, query.Payload)
+		nodes := trans.local.GetTuples(query.Payload)
+
 		buf, err := msgpack.Marshal(nodes)
-		if err != nil {
-			return err
+		if err == nil {
+			return query.Respond(buf)
 		}
-
-		return query.Respond(buf)
+		return err
 	}
 	return nil
+}
+
+// Shutdown signals a shutdown of the even channel
+func (trans *SerfTransport) Shutdown() {
+	trans.shutdown <- struct{}{}
 }

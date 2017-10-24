@@ -33,6 +33,7 @@ func initConf() (*kelips.Config, *serf.Config) {
 	}
 
 	conf := kelips.DefaultConfig()
+	conf.Hostname = *advAddr
 
 	serfConf := serf.DefaultConfig()
 	serfConf.NodeName = *advAddr
@@ -140,7 +141,12 @@ func main() {
 	serfConf.LogOutput = ioutil.Discard
 	serfConf.MemberlistConfig.LogOutput = ioutil.Discard
 
-	kelps, err := kelips.NewKelips(conf, serfConf)
+	trans, err := kelips.NewSerfTransport(serfConf)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	kelps, err := kelips.NewKelips(conf, trans)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -149,7 +155,7 @@ func main() {
 	peers := parsePeers()
 	if len(peers) > 0 {
 		log.Println("Joining", *joinAddrs)
-		if err = kelps.Join(peers...); err != nil {
+		if err = trans.Join(peers...); err != nil {
 			log.Fatal(err)
 		}
 	}
