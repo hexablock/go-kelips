@@ -49,8 +49,6 @@ func NewSerfTransport(serfConf *serf.Config) (*SerfTransport, error) {
 	}
 	trans.serf = s
 
-	go trans.handleEvents()
-
 	return trans, nil
 }
 
@@ -90,6 +88,7 @@ func (trans *SerfTransport) Ping(node *Node) time.Duration {
 // Register registers the local rpc used to serve network requests
 func (trans *SerfTransport) Register(rpc AffinityGroupRPC) {
 	trans.local = rpc
+	go trans.handleEvents()
 }
 
 // Lookup submits a lookup request to the optionally supplied nodes. If no hosts
