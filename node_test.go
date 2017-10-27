@@ -2,7 +2,6 @@ package kelips
 
 import (
 	"crypto/sha256"
-	"hash"
 	"net"
 	"testing"
 )
@@ -10,9 +9,7 @@ import (
 func Test_Node(t *testing.T) {
 
 	n := &Node{Host: &Host{Addr: net.ParseIP("127.0.0.1"), Port: 10000}}
-	n.init(func() hash.Hash {
-		return sha256.New()
-	})
+	n.init(sha256.New())
 	n.MarshalJSON()
 	if n.ID == nil {
 		t.Fatal("id nil")

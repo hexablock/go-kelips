@@ -55,7 +55,7 @@ func (ag *localAffinityGroup) getGroup(key []byte) *affinityGroup {
 }
 
 func (ag *localAffinityGroup) AddNode(node *Node) error {
-	node.init(ag.hashFunc)
+	node.init(ag.hashFunc())
 	group := ag.groups.get(node.ID)
 	return group.addNode(node)
 }

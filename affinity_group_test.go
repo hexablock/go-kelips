@@ -32,7 +32,7 @@ func Test_AffinityGroup(t *testing.T) {
 	g := groups.get(sh[:])
 
 	n := &Node{Host: NewHost("127.0.0.1", 23232)}
-	n.init(sha256.New)
+	n.init(sha256.New())
 
 	err := g.addNode(n)
 	if err != nil {

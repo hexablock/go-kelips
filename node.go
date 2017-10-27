@@ -51,6 +51,7 @@ type Node struct {
 	ID   []byte
 	Name string
 	Tags map[string]string
+
 	// Number of heartbeats received
 	Heartbeats int
 
@@ -61,8 +62,7 @@ type Node struct {
 	LastSeen time.Time
 }
 
-func (n *Node) init(f func() hash.Hash) {
-	h := f()
+func (n *Node) init(h hash.Hash) {
 	// Generate id from host:port
 	h.Write([]byte(n.String()))
 	sh := h.Sum(nil)

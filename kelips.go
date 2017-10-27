@@ -72,7 +72,7 @@ func (kelps *Kelips) init() {
 	k := int64(kelps.conf.NumAffinityGroups)
 
 	// Init local id
-	kelps.node.init(kelps.conf.HashFunc)
+	kelps.node.init(kelps.conf.HashFunc())
 	kelps.group.init(kelps.node.ID, k, kelps.trans)
 
 	kelps.trans.Register(kelps.group)
@@ -108,13 +108,13 @@ func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
 		nodes = kelps.group.getTupleNodes(grp, key)
 
 	} else {
-		n := grp.Nodes()
+		gnodes := grp.Nodes()
 		// Filter by nodes in the group
-		filter := make([]string, 0, len(n))
-		for _, v := range n {
+		filter := make([]string, 0, len(gnodes))
+		for _, v := range gnodes {
 			filter = append(filter, v.Name)
 		}
-
+		// Lookup against specified nodes
 		nodes, err = kelps.trans.Lookup(key, filter...)
 	}
 
@@ -127,7 +127,7 @@ func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
 func (kelps *Kelips) Insert(key []byte, host *Host) error {
 	// Conditionally add tuple
 	kelps.group.AddTuple(string(key), host)
-	// Broadcast the insert to the network.
+	// Broadcast the insert to the network to allow others to add the tuple
 	return kelps.trans.Insert(key, host)
 }
 
