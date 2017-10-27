@@ -64,6 +64,10 @@ func NewKelips(conf *Config, trans Transport) (*Kelips, error) {
 	return k, nil
 }
 
+func (kelps *Kelips) LocalHost() *Host {
+	return kelps.node.Host
+}
+
 func (kelps *Kelips) init() {
 	k := int64(kelps.conf.NumAffinityGroups)
 

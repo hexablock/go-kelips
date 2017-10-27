@@ -28,9 +28,7 @@ func DefaultConfig(hostname string) *Config {
 		Hostname:          hostname,
 		NumAffinityGroups: 2,
 		HeartbeatInterval: 30 * time.Second,
-		HashFunc: func() hash.Hash {
-			return sha256.New()
-		},
+		HashFunc:          sha256.New,
 	}
 
 	return conf

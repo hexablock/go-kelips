@@ -113,21 +113,21 @@ func (trans *SerfTransport) handleUser(evt serf.UserEvent) error {
 	return nil
 }
 
-func (trans *SerfTransport) handleQuery(query *serf.Query) error {
+func (trans *SerfTransport) handleQuery(query *serf.Query) (err error) {
 	typ := query.Name
+
 	switch typ {
 
 	case queryLookup:
-
 		nodes := trans.local.GetTuples(query.Payload)
-
-		buf, err := msgpack.Marshal(nodes)
-		if err == nil {
-			return query.Respond(buf)
+		var buf []byte
+		if buf, err = msgpack.Marshal(nodes); err == nil {
+			err = query.Respond(buf)
 		}
-		return err
+
 	}
-	return nil
+
+	return err
 }
 
 // Shutdown signals a shutdown of the even channel
