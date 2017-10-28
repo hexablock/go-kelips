@@ -64,8 +64,15 @@ func NewKelips(conf *Config, trans Transport) (*Kelips, error) {
 	return k, nil
 }
 
+// LocalHost returns the local host object for this node
 func (kelps *Kelips) LocalHost() *Host {
 	return kelps.node.Host
+}
+
+// LocalGroup returns the local group this node belongs to.  It is based on the
+// node id calculated when the node is initialized
+func (kelps *Kelips) LocalGroup() AffinityGroup {
+	return kelps.group.localGroup()
 }
 
 func (kelps *Kelips) init() {

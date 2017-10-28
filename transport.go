@@ -25,8 +25,10 @@ type SerfTransport struct {
 
 	queryTimeout time.Duration
 
+	// Used to service rpc requests
 	local AffinityGroupRPC
 
+	// Gossip events from serf
 	events chan serf.Event
 
 	// write to this channel to initiate shutdown

@@ -40,6 +40,10 @@ func (ag *localAffinityGroup) init(nid []byte, k int64, trans Transport) {
 	ag.idx = group.index
 }
 
+func (ag *localAffinityGroup) localGroup() *affinityGroup {
+	return ag.groups[ag.idx]
+}
+
 // check all the nodes
 func (ag *localAffinityGroup) checkNodes() {
 	for _, grp := range ag.groups {
