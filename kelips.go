@@ -10,8 +10,11 @@ import (
 
 // TupleStore implements a store for a mapping of files to hosts
 type TupleStore interface {
+	// Add a name to host mapping
 	Add(name string, host *Host) bool
+	// Get all hosts mapped to the name
 	Get(name string) []*Host
+	// Delete a name to host mapping
 	Del(name string, host *Host) bool
 }
 
@@ -64,17 +67,6 @@ func NewKelips(conf *Config, trans Transport) (*Kelips, error) {
 	return k, nil
 }
 
-// LocalHost returns the local host object for this node
-func (kelps *Kelips) LocalHost() *Host {
-	return kelps.node.Host
-}
-
-// LocalGroup returns the local group this node belongs to.  It is based on the
-// node id calculated when the node is initialized
-func (kelps *Kelips) LocalGroup() AffinityGroup {
-	return kelps.group.localGroup()
-}
-
 func (kelps *Kelips) init() {
 	k := int64(kelps.conf.NumAffinityGroups)
 
@@ -95,13 +87,26 @@ func (kelps *Kelips) checkNodes() {
 	}
 }
 
+// LocalHost returns the local host object for this node
+func (kelps *Kelips) LocalHost() *Host {
+	return kelps.node.Host
+}
+
+// LocalGroup returns the local group this node belongs to.  It is based on the
+// node id calculated when the node is initialized
+func (kelps *Kelips) LocalGroup() AffinityGroup {
+	return kelps.group.localGroup()
+}
+
 // LookupGroup hashes a key and returning the associated group
 func (kelps *Kelips) LookupGroup(key []byte) AffinityGroup {
 	return kelps.group.getGroup(key)
 }
 
-// Lookup does a local lookup and returns all nodes that have the key.  If the
-// key is not found no nodes are returned
+// Lookup finds the nodes referring to the key.  It first determines the group
+// of the key.  If the group is local all matching nodes in the group associated
+// to the key are returned, otherwise the lookup request is forwarded to the
+// nodes in the other group
 func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
 	grp := kelps.group.getGroup(key)
 
