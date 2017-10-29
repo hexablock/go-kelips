@@ -109,7 +109,7 @@ func (kelps *Kelips) LocalGroup() AffinityGroup {
 
 // LookupGroup hashes a key and returning the associated group
 func (kelps *Kelips) LookupGroup(key []byte) AffinityGroup {
-	return kelps.group.getGroup(key)
+	return kelps.group.LookupGroup(key)
 }
 
 // Lookup finds the nodes referring to the key.  It first determines the group
@@ -117,7 +117,7 @@ func (kelps *Kelips) LookupGroup(key []byte) AffinityGroup {
 // to the key are returned, otherwise the lookup request is forwarded to the
 // nodes in the other group
 func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
-	grp := kelps.group.getGroup(key)
+	grp := kelps.group.LookupGroup(key)
 
 	var (
 		nodes []Node

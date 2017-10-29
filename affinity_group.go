@@ -48,23 +48,19 @@ func (ag *localAffinityGroup) AddNode(node *Node) error {
 }
 
 func (ag *localAffinityGroup) RemoveNode(host string) error {
-	group := ag.getGroup([]byte(host))
+	group := ag.LookupGroup([]byte(host))
 	return group.removeNode(host)
 }
 
-// Add tuple adds a tuple to the the local group only if it belongs int it.
-// It returns true if it was added
-func (ag *localAffinityGroup) AddTuple(key []byte, host *Host) bool {
-	group := ag.getGroup(key)
-	if group.Index() != ag.idx {
-		return false
-	}
-
-	return ag.tuples.Add(key, host)
+func (ag *localAffinityGroup) LookupGroup(key []byte) *affinityGroup {
+	h := ag.hashFunc()
+	h.Write(key)
+	sh := h.Sum(nil)
+	return ag.groups.get(sh[:])
 }
 
 func (ag *localAffinityGroup) Lookup(key []byte) []Node {
-	group := ag.getGroup(key)
+	group := ag.LookupGroup(key)
 	// Only process if we are in the group
 	if group.Index() != ag.idx {
 		return nil
@@ -72,12 +68,22 @@ func (ag *localAffinityGroup) Lookup(key []byte) []Node {
 	return ag.getTupleNodes(group, key)
 }
 
+// Add tuple adds a tuple to the the local group only if it belongs int it.
+// It returns true if it was added
+func (ag *localAffinityGroup) AddTuple(key []byte, host *Host) bool {
+	group := ag.LookupGroup(key)
+	if group.Index() != ag.idx {
+		return false
+	}
+
+	return ag.tuples.Add(key, host)
+}
 func (ag *localAffinityGroup) IterTuples(f func([]byte, []*Host) bool) {
 	ag.tuples.Iter(f)
 }
 
 func (ag *localAffinityGroup) GetTuple(key []byte) []Node {
-	grp := ag.getGroup(key)
+	grp := ag.LookupGroup(key)
 	return ag.getTupleNodes(grp, key)
 }
 
@@ -90,7 +96,7 @@ func (ag *localAffinityGroup) getTupleNodes(grp AffinityGroup, key []byte) []Nod
 		n, ok := grp.GetNode(h.String())
 		if !ok {
 			// Check other groups
-			rgrp := ag.getGroup([]byte(h.String()))
+			rgrp := ag.LookupGroup([]byte(h.String()))
 			if n, ok = rgrp.GetNode(h.String()); !ok {
 				// Continue/skip if not found
 				continue
@@ -107,18 +113,11 @@ func (ag *localAffinityGroup) localGroup() *affinityGroup {
 	return ag.groups[ag.idx]
 }
 
-// check all the nodes
+// check all the nodes we know of
 func (ag *localAffinityGroup) checkNodes() {
 	for _, grp := range ag.groups {
 		grp.checkNodes()
 	}
-}
-
-func (ag *localAffinityGroup) getGroup(key []byte) *affinityGroup {
-	h := ag.hashFunc()
-	h.Write(key)
-	sh := h.Sum(nil)
-	return ag.groups.get(sh[:])
 }
 
 // AffinityGroup implements an affinity group interface to abstract local and
