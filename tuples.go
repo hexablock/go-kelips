@@ -16,9 +16,23 @@ func NewInmemTuples() *InmemTuples {
 	return &InmemTuples{m: make(map[string][]*Host)}
 }
 
+// Iter iterates over all the tuples.  If the callback returns false, iteration
+// is terminated
+func (ft *InmemTuples) Iter(f func(key []byte, hosts []*Host) bool) {
+	ft.mu.RLock()
+	for k, v := range ft.m {
+		if !f([]byte(k), v) {
+			break
+		}
+	}
+	ft.mu.RUnlock()
+}
+
 // Add adds a new host for a name if it does not already exist.  It returns true
 // if the host was added
-func (ft *InmemTuples) Add(name string, h *Host) bool {
+func (ft *InmemTuples) Add(key []byte, h *Host) bool {
+	name := string(key)
+
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 
@@ -45,7 +59,9 @@ func (ft *InmemTuples) Add(name string, h *Host) bool {
 }
 
 // Del deletes a host associated to the name returning true if it was deleted
-func (ft *InmemTuples) Del(name string, h *Host) bool {
+func (ft *InmemTuples) Del(key []byte, h *Host) bool {
+	name := string(key)
+
 	ft.mu.RLock()
 	hosts, ok := ft.m[name]
 	if !ok {
@@ -72,7 +88,8 @@ func (ft *InmemTuples) Del(name string, h *Host) bool {
 
 // Get returns a list of hosts for a name.  It returns nil if the name is not
 // found
-func (ft *InmemTuples) Get(name string) []*Host {
+func (ft *InmemTuples) Get(key []byte) []*Host {
+	name := string(key)
 	ft.mu.RLock()
 	defer ft.mu.RUnlock()
 

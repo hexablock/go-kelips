@@ -107,7 +107,7 @@ func (trans *SerfTransport) handleUser(evt serf.UserEvent) error {
 		key := data[:pos]
 		host := NewHostFromBytes(data[pos:])
 
-		trans.local.AddTuple(string(key), host)
+		trans.local.AddTuple(key, host)
 	}
 
 	return nil
@@ -119,7 +119,7 @@ func (trans *SerfTransport) handleQuery(query *serf.Query) (err error) {
 	switch typ {
 
 	case queryLookup:
-		nodes := trans.local.GetTuples(query.Payload)
+		nodes := trans.local.GetTuple(query.Payload)
 		var buf []byte
 		if buf, err = msgpack.Marshal(nodes); err == nil {
 			err = query.Respond(buf)

@@ -40,24 +40,7 @@ func (ag *localAffinityGroup) init(nid []byte, k int64, trans Transport) {
 	ag.idx = group.index
 }
 
-func (ag *localAffinityGroup) localGroup() *affinityGroup {
-	return ag.groups[ag.idx]
-}
-
-// check all the nodes
-func (ag *localAffinityGroup) checkNodes() {
-	for _, grp := range ag.groups {
-		grp.checkNodes()
-	}
-}
-
-func (ag *localAffinityGroup) getGroup(key []byte) *affinityGroup {
-	h := ag.hashFunc()
-	h.Write(key)
-	sh := h.Sum(nil)
-	return ag.groups.get(sh[:])
-}
-
+// AddNode adds the node to its associated group based on id
 func (ag *localAffinityGroup) AddNode(node *Node) error {
 	node.init(ag.hashFunc())
 	group := ag.groups.get(node.ID)
@@ -69,15 +52,15 @@ func (ag *localAffinityGroup) RemoveNode(host string) error {
 	return group.removeNode(host)
 }
 
-// Add tuple adds a tuple to the associated group only if it is this nodes group
-func (ag *localAffinityGroup) AddTuple(name string, host *Host) {
-	group := ag.getGroup([]byte(name))
+// Add tuple adds a tuple to the the local group only if it belongs int it.
+// It returns true if it was added
+func (ag *localAffinityGroup) AddTuple(key []byte, host *Host) bool {
+	group := ag.getGroup(key)
 	if group.Index() != ag.idx {
-		return
+		return false
 	}
 
-	ag.tuples.Add(name, host)
-
+	return ag.tuples.Add(key, host)
 }
 
 func (ag *localAffinityGroup) Lookup(key []byte) []Node {
@@ -89,13 +72,17 @@ func (ag *localAffinityGroup) Lookup(key []byte) []Node {
 	return ag.getTupleNodes(group, key)
 }
 
-func (ag *localAffinityGroup) GetTuples(key []byte) []Node {
+func (ag *localAffinityGroup) IterTuples(f func([]byte, []*Host) bool) {
+	ag.tuples.Iter(f)
+}
+
+func (ag *localAffinityGroup) GetTuple(key []byte) []Node {
 	grp := ag.getGroup(key)
 	return ag.getTupleNodes(grp, key)
 }
 
 func (ag *localAffinityGroup) getTupleNodes(grp AffinityGroup, key []byte) []Node {
-	hosts := ag.tuples.Get(string(key))
+	hosts := ag.tuples.Get(key)
 	nodes := make([]Node, 0, len(hosts))
 	for _, h := range hosts {
 
@@ -114,6 +101,24 @@ func (ag *localAffinityGroup) getTupleNodes(grp AffinityGroup, key []byte) []Nod
 	}
 
 	return nodes
+}
+
+func (ag *localAffinityGroup) localGroup() *affinityGroup {
+	return ag.groups[ag.idx]
+}
+
+// check all the nodes
+func (ag *localAffinityGroup) checkNodes() {
+	for _, grp := range ag.groups {
+		grp.checkNodes()
+	}
+}
+
+func (ag *localAffinityGroup) getGroup(key []byte) *affinityGroup {
+	h := ag.hashFunc()
+	h.Write(key)
+	sh := h.Sum(nil)
+	return ag.groups.get(sh[:])
 }
 
 // AffinityGroup implements an affinity group interface to abstract local and

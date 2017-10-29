@@ -10,12 +10,13 @@ import (
 )
 
 // AffinityGroupRPC implements RPC's used by the network transport to serve
-// requests
+// requests. This is the local afffinity group for the node
 type AffinityGroupRPC interface {
 	AddNode(node *Node) error
 	RemoveNode(host string) error
-	AddTuple(name string, host *Host)
-	GetTuples(key []byte) []Node
+	AddTuple(key []byte, host *Host) bool
+	GetTuple(key []byte) []Node
+	IterTuples(f func(key []byte, host []*Host) bool)
 }
 
 // SerfTransport implements a Transport interface using serf for gossip

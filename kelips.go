@@ -11,21 +11,30 @@ import (
 // TupleStore implements a store for a mapping of files to hosts
 type TupleStore interface {
 	// Add a name to host mapping
-	Add(name string, host *Host) bool
+	Add(key []byte, host *Host) bool
+
 	// Get all hosts mapped to the name
-	Get(name string) []*Host
+	Get(key []byte) []*Host
+
 	// Delete a name to host mapping
-	Del(name string, host *Host) bool
+	Del(key []byte, host *Host) bool
+
+	// Iterate over all tuples
+	Iter(f func(key []byte, hosts []*Host) bool)
 }
 
 // Transport needed by kelips
 type Transport interface {
 	Ping(node *Node) time.Duration
-	// Insert a key-host association
+
+	// Insert a key-host mapping
 	Insert(key []byte, host *Host) error
+
 	// Lookup a key on the optional hosts
 	Lookup(key []byte, hosts ...string) ([]Node, error)
 
+	// Register is called by kelips to register the local AffinityGroup with the
+	// transport
 	Register(AffinityGroupRPC)
 }
 
@@ -74,10 +83,10 @@ func (kelps *Kelips) init() {
 	kelps.node.init(kelps.conf.HashFunc())
 	kelps.group.init(kelps.node.ID, k, kelps.trans)
 
+	// Register affinity groups with the transport
 	kelps.trans.Register(kelps.group)
 
-	log.Printf("[INFO] Kelips initialized group=%d id=%x total=%d",
-		kelps.group.idx, kelps.node.ID, len(kelps.group.groups))
+	log.Printf("[INFO] Kelips initialized group=%d id=%x total=%d", kelps.group.idx, kelps.node.ID, len(kelps.group.groups))
 }
 
 func (kelps *Kelips) checkNodes() {
@@ -138,7 +147,7 @@ func (kelps *Kelips) Lookup(key []byte) ([]Node, error) {
 // The insert is then broadcasted to the network.
 func (kelps *Kelips) Insert(key []byte, host *Host) error {
 	// Conditionally add tuple
-	kelps.group.AddTuple(string(key), host)
+	kelps.group.AddTuple(key, host)
 	// Broadcast the insert to the network to allow others to add the tuple
 	return kelps.trans.Insert(key, host)
 }

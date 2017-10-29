@@ -24,6 +24,10 @@ func Test_Node(t *testing.T) {
 
 	b := n.Bytes()
 
+	if len(b) != 18 {
+		t.Error("should be 6", len(b))
+	}
+
 	h1 := NewHostFromBytes(b)
 	if n.String() != h1.String() {
 		t.Fatal(n.String(), h1.String())
