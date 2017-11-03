@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/serf/serf"
-	kelips "github.com/hexablock/go-kelips"
+	kelips "github.com/hexablock/kelips"
 )
 
 var (
@@ -26,27 +25,12 @@ func parseAdvAddr() (string, int64, error) {
 	return hp[0], port, err
 }
 
-func initConf() (*kelips.Config, *serf.Config) {
-	host, port, err := parseAdvAddr()
-	if err != nil {
-		log.Fatal(err)
-	}
+func initConf() *kelips.Config {
 
-	conf := kelips.DefaultConfig()
+	conf := kelips.DefaultConfig(*advAddr)
 	conf.Hostname = *advAddr
 
-	serfConf := serf.DefaultConfig()
-	serfConf.NodeName = *advAddr
-	serfConf.Tags = map[string]string{"key": "value"}
-
-	s := serfConf.MemberlistConfig
-
-	s.AdvertiseAddr = host
-	s.BindAddr = host
-	s.AdvertisePort = int(port)
-	s.BindPort = int(port)
-
-	return conf, serfConf
+	return conf
 }
 
 func parsePeers() []string {
@@ -67,10 +51,10 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(reqpath, "group/") {
-		hs.handleGroup(w, strings.TrimPrefix(reqpath, "group/"))
-		return
-	}
+	// if strings.HasPrefix(reqpath, "group/") {
+	// 	hs.handleGroup(w, strings.TrimPrefix(reqpath, "group/"))
+	// 	return
+	// }
 
 	var (
 		err error
@@ -97,12 +81,9 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("must be in format {host}:{ip}/{key}")
 			break
 		}
-		hp := strings.Split(hpath[0], ":")
-		var port int64
-		if port, err = strconv.ParseInt(hp[1], 10, 64); err == nil {
-			host := kelips.NewHost(hp[0], uint16(port))
-			err = hs.klp.Insert([]byte(hpath[1]), host)
-		}
+
+		tuple := kelips.NewTupleHost(hpath[0])
+		err = hs.klp.Insert([]byte(hpath[1]), tuple)
 
 	default:
 		w.WriteHeader(405)
@@ -116,51 +97,42 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (hs *httpServer) handleGroup(w http.ResponseWriter, reqpath string) {
-	if reqpath == "" {
-		w.WriteHeader(404)
-		return
-	}
-
-	nodes := hs.klp.LookupGroup([]byte(reqpath))
-	b, err := json.Marshal(nodes)
-	if err != nil {
-		w.WriteHeader(500)
-		w.Write([]byte(err.Error()))
-	} else {
-		w.Write(b)
-	}
-}
-
 func main() {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 	log.SetPrefix("| " + *advAddr + " | ")
 
-	conf, serfConf := initConf()
-	serfConf.LogOutput = ioutil.Discard
-	serfConf.MemberlistConfig.LogOutput = ioutil.Discard
+	conf := initConf()
 
-	trans, err := kelips.NewSerfTransport(serfConf)
+	udpAddr, err := net.ResolveUDPAddr("udp", *advAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	kelps, err := kelips.NewKelips(conf, trans)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Started", *advAddr)
+	trans := kelips.NewUDPTransport(conn)
 
-	peers := parsePeers()
-	if len(peers) > 0 {
-		log.Println("Joining", *joinAddrs)
-		if err = trans.Join(peers...); err != nil {
-			log.Fatal(err)
-		}
-	}
+	//	coords, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	kelps := kelips.Create(conf, trans)
+
+	log.Println("Started cluster on", *advAddr)
+
+	// peers := parsePeers()
+	// if len(peers) > 0 {
+	// 	log.Println("Joining", *joinAddrs)
+	// 	if err = trans.Join(peers...); err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }
 
 	handler := &httpServer{klp: kelps}
+	log.Println("Starting HTTP on", *httpAddr)
 	if err = http.ListenAndServe(*httpAddr, handler); err != nil {
 		log.Fatal(err)
 	}

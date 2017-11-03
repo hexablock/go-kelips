@@ -1,255 +1,114 @@
 package kelips
 
 import (
-	"fmt"
-	"io/ioutil"
 	"testing"
 	"time"
-
-	"github.com/hashicorp/serf/serf"
 )
 
-func newTestConfig() *serf.Config {
-	config := serf.DefaultConfig()
-	config.Init()
-
-	// Set probe intervals that are aggressive for finding bad nodes
-	config.MemberlistConfig.GossipInterval = 5 * time.Millisecond
-	config.MemberlistConfig.ProbeInterval = 50 * time.Millisecond
-	config.MemberlistConfig.ProbeTimeout = 25 * time.Millisecond
-	config.MemberlistConfig.SuspicionMult = 1
-
-	// Set a short reap interval so that it can run during the test
-	config.ReapInterval = 1 * time.Second
-
-	// Set a short reconnect interval so that it can run a lot during tests
-	config.ReconnectInterval = 100 * time.Millisecond
-
-	// Set basically zero on the reconnect/tombstone timeouts so that
-	// they're removed on the first ReapInterval.
-	config.ReconnectTimeout = 1 * time.Microsecond
-	config.TombstoneTimeout = 1 * time.Microsecond
-
-	return config
+func fastTestConf(addr string) *Config {
+	c1 := DefaultConfig(addr)
+	//c1.PingMax = 300 * time.Millisecond
+	//c1.PingMin = 100 * time.Millisecond
+	return c1
 }
 
-type testServer struct {
-	trans *SerfTransport
-	klp   *Kelips
-}
+func Test_Kelips(t *testing.T) {
 
-func newTestServer(host string, port int, joins ...string) (*testServer, error) {
+	c1 := fastTestConf("127.0.0.1:54540")
+	t1 := newBareTrans("127.0.0.1:54540")
+	//	cc1, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
+	k1 := Create(c1, t1)
 
-	conf := DefaultConfig(fmt.Sprintf("%s:%d", host, port))
-	conf.NumAffinityGroups = 2
-	conf.HeartbeatInterval = 1 * time.Second
+	c2 := fastTestConf("127.0.0.1:54541")
+	t2 := newBareTrans("127.0.0.1:54541")
+	//	cc2, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
+	k2 := Create(c2, t2)
 
-	serfConf := newTestConfig()
-	serfConf.NodeName = conf.Hostname
-	serfConf.Tags = map[string]string{"tag": "tag-value"}
-	serfConf.EnableNameConflictResolution = true
-	serfConf.LogOutput = ioutil.Discard
-	serfConf.MemberlistConfig.AdvertiseAddr = host
-	serfConf.MemberlistConfig.AdvertisePort = port
-	serfConf.MemberlistConfig.BindAddr = host
-	serfConf.MemberlistConfig.BindPort = port
-	serfConf.MemberlistConfig.LogOutput = ioutil.Discard
+	c3 := fastTestConf("127.0.0.1:54542")
+	t3 := newBareTrans("127.0.0.1:54542")
+	//	cc3, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
+	k3 := Create(c3, t3)
 
-	srf, err := NewSerfTransport(serfConf)
-	if err != nil {
-		return nil, err
+	testkey := []byte("key")
+	testkey1 := []byte("test-key-test")
+
+	if err := k1.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
+		t.Fatal(err)
 	}
-
-	kelps, err := NewKelips(conf, srf)
-	if err != nil {
-		return nil, err
+	if err := k2.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
+		t.Fatal(err)
 	}
-
-	if len(joins) > 0 {
-		err = srf.Join(joins...)
-	}
-
-	ts := &testServer{trans: srf, klp: kelps}
-
-	return ts, err
-}
-
-func Test_Kelips_Shutdown(t *testing.T) {
-	peers := []string{"127.0.0.1:23456", "127.0.0.1:23457"}
-
-	k0, err := newTestServer("127.0.0.1", 23456)
-	if err != nil {
+	if err := k3.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
 		t.Fatal(err)
 	}
 
-	k1, err := newTestServer("127.0.0.1", 23457, peers...)
-	if err != nil {
+	if err := k1.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
+		t.Fatal(err)
+	}
+	if err := k2.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
+		t.Fatal(err)
+	}
+	if err := k3.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
 		t.Fatal(err)
 	}
 
-	k2, err := newTestServer("127.0.0.1", 23458, peers...)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	k3, err := newTestServer("127.0.0.1", 23459, peers...)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if k2.trans.Serf() == nil {
-		t.Fatal("serf should be set")
-	}
-
-	if err = k0.trans.serf.UserEvent("k0", []byte("foobar"), false); err != nil {
-		t.Error(err)
-	}
-
-	if err = k1.trans.serf.UserEvent("k1", []byte("foobar"), false); err != nil {
-		t.Error(err)
-	}
-	if err = k2.trans.serf.UserEvent("k2", []byte("foobar"), false); err != nil {
-		t.Error(err)
-	}
-
-	var params *serf.QueryParam
-	if _, err = k1.trans.serf.Query("127.0.0.1:23459", []byte{}, params); err != nil {
-		t.Fatal(err)
-	}
-
-	<-time.After(2 * time.Second)
-
-	if err = k0.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k0.trans.serf.Shutdown()
-
-	if err = k1.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k1.trans.serf.Shutdown()
-
-	if err = k2.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k2.trans.serf.Shutdown()
-
-	if err = k3.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k3.trans.serf.Shutdown()
-
-}
-
-func Test_Kelips_Lookup(t *testing.T) {
-	peers := []string{"127.0.0.1:33456", "127.0.0.1:33457"}
-
-	k0, err := newTestServer("127.0.0.1", 33456)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	k1, err := newTestServer("127.0.0.1", 33457, peers...)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	k2, err := newTestServer("127.0.0.1", 12458, peers...)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	k3, err := newTestServer("127.0.0.1", 33459, peers...)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	//Allow ping
 	<-time.After(1 * time.Second)
 
-	n0 := k0.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
-	if len(n0) == 0 {
-		t.Error("no nodes found")
+	n1, err := k1.Lookup(testkey)
+	t.Log(n1, err)
+	n2, err := k2.Lookup(testkey)
+	t.Log(n2, err)
+	n3, err := k3.Lookup(testkey)
+	t.Log(n3, err)
+
+	n1, err = k1.Lookup(testkey1)
+	t.Log(n1, err)
+	n2, err = k2.Lookup(testkey1)
+	t.Log(n2, err)
+	n3, err = k3.Lookup(testkey1)
+	t.Log(n3, err)
+
+	k1.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54541))
+	k1.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54542))
+
+	t.Log(k1.groups[0])
+	t.Log(k1.groups[1])
+
+	kn1 := k1.LocalNode()
+	if kn1.Host() != "127.0.0.1:54540" {
+		t.Fatal("wrong host", kn1.Host())
 	}
 
-	n1 := k1.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
-	if len(n1) == 0 {
-		t.Error("no nodes found")
+	ss := k1.Snapshot()
+	if len(ss.Nodes) != k1.local.groups.nodeCount() {
+		t.Error("should have nodes", len(ss.Nodes), k1.local.groups.nodeCount())
 	}
 
-	n2 := k2.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
-	if len(n2) != len(n1) {
-		t.Error("lookup length mismatch")
+	if len(ss.Tuples) != k1.local.tuples.Count() {
+		t.Error("should have tuples", len(ss.Tuples), k1.local.tuples.Count())
 	}
 
-	n3 := k3.klp.LookupGroup([]byte("key")).Nodes()
-	if len(n3) == 0 {
-		t.Error("nothing for key")
+	if int(ss.Groups) != k1.conf.NumGroups {
+		t.Error("group mismatch")
 	}
+	// b, _ := proto.Marshal(ss)
+	// t.Log("Snapshot size", len(b))
+	//
+	// if err = k1.RemoveNode("127.0.0.1:54542"); err != nil {
+	// 	t.Fatal(err)
+	// }
+	// if err = k3.RemoveNode("127.0.0.1:54548"); err == nil {
+	// 	t.Fatal("should failed")
+	// }
 
-	// Insert
-	if err = k0.klp.Insert([]byte("key"), NewHost("127.0.0.1", 12458)); err != nil {
-		t.Fatal(err)
-	}
-
-	<-time.After(100 * time.Millisecond)
-	nodes, err := k2.klp.Lookup([]byte("key"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(nodes) == 0 {
-		t.Fatal("should have nodes")
-	}
-	var found bool
-	for _, v := range nodes {
-		if v.String() == "127.0.0.1:12458" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("should be found")
-	}
-
-	// Forwarded lookup
-	l4, err := k0.klp.Lookup([]byte("key"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(l4) != len(nodes) {
-		t.Errorf("node count mismatch want=%d have=%d", len(nodes), len(l4))
-	}
-
-	// Leave
-	if err = k0.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k0.trans.serf.Shutdown()
-	<-k0.trans.serf.ShutdownCh()
-	// Check graceful leave
-	<-time.After(100 * time.Millisecond)
-	nj := k2.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
-	if len(nj) >= len(n2) {
-		t.Error("should have less than", len(nj))
-	}
-
-	// Force shutdown
-	k1.trans.serf.Shutdown()
-	<-k1.trans.serf.ShutdownCh()
-
-	// Check force shutdown
-	<-time.After(1 * time.Second)
-	nf := k2.klp.LookupGroup([]byte("127.0.0.1:33458")).Nodes()
-	if len(nf) != len(nj) {
-		t.Fatal("should have same as leave")
-	}
-
-	if err = k2.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k2.trans.serf.Shutdown()
-
-	if err = k3.trans.serf.Leave(); err != nil {
-		t.Error(err)
-	}
-	k3.trans.serf.Shutdown()
+	// for _, g := range k1.groups {
+	// 	n := g.Nodes()
+	// 	//b, _ := json.MarshalIndent(n, "", "  ")
+	// 	//t.Logf("%s\n", b)
+	// 	b1, _ := msgpack.Marshal(n[0].Coordinates)
+	// 	b2, _ := proto.Marshal(&n[0].Coordinates)
+	// 	t.Logf("msgpack=%d protobuf=%d", len(b1), len(b2))
+	// }
 
 }

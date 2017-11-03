@@ -3,6 +3,8 @@ package kelips
 import (
 	"bytes"
 	"math/big"
+
+	"github.com/hexablock/hexatype"
 )
 
 type affinityGroups []*affinityGroup
@@ -32,6 +34,29 @@ REPEAT_ON_HALF:
 	}
 
 	return arr[i]
+}
+
+func (ct affinityGroups) nodeCount() int {
+	var c int
+	for _, g := range ct {
+		c += g.count()
+	}
+	return c
+}
+
+// iterNodes iterates over all nodes in all groups
+func (ct affinityGroups) iterNodes(f func(hexatype.Node) bool) {
+	for _, group := range ct {
+
+		nodes := group.Nodes()
+		for _, node := range nodes {
+			if !f(node) {
+				return
+			}
+		}
+
+	}
+
 }
 
 func genAffinityGroups(numGroups int64, hashSize int64) affinityGroups {
