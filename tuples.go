@@ -4,10 +4,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
-	"log"
 	"net"
 	"strconv"
 	"sync"
+
+	"github.com/hexablock/log"
 )
 
 // TupleHost is the host port of a key tuple
@@ -97,7 +98,7 @@ func (ft *InmemTuples) Insert(key []byte, h TupleHost) error {
 	hosts, ok := ft.m[name]
 	if !ok {
 		ft.m[name] = []TupleHost{h}
-		log.Printf("[INFO] Tuple added key=%s host=%s", name, h)
+		log.Printf("[INFO] Tuple added key=%x host=%s", name, h)
 		return nil
 	}
 
@@ -112,7 +113,7 @@ func (ft *InmemTuples) Insert(key []byte, h TupleHost) error {
 
 	if !ok {
 		ft.m[name] = append(hosts, h)
-		log.Printf("[INFO] Tuple added key=%s host=%s", name, h)
+		log.Printf("[INFO] Tuple added key=%x host=%s", name, h)
 	}
 
 	return nil
@@ -165,7 +166,7 @@ func (ft *InmemTuples) DeleteKeyHost(key []byte, h TupleHost) bool {
 			ft.m[name] = append(hosts[:i], hosts[i+1:]...)
 			ft.mu.Unlock()
 
-			log.Printf("[INFO] Tuple deleted key=%s host=%s", name, h)
+			log.Printf("[INFO] Tuple deleted key=%x host=%s", name, h)
 			return true
 		}
 	}
@@ -183,7 +184,7 @@ func (ft *InmemTuples) ExpireHost(tuple TupleHost) bool {
 		for i, h := range hosts {
 			if h.String() == th {
 				ft.m[k] = append(hosts[:i], hosts[i+1:]...)
-				log.Printf("[INFO] Tuple expired key=%s host=%s", k, th)
+				log.Printf("[INFO] Tuple expired key=%x host=%s", k, th)
 				ok = true
 				break
 			}

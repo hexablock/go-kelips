@@ -2,15 +2,17 @@ package kelips
 
 import (
 	"fmt"
-	"log"
 	"net"
 
 	"github.com/golang/protobuf/proto"
+
 	"github.com/hexablock/hexatype"
+	"github.com/hexablock/log"
 )
 
 const (
 	reqTypeLookup byte = iota + 3
+	reqTypeLookupGroupNodes
 	reqTypeInsert
 	reqTypeDelete
 )
@@ -32,37 +34,12 @@ type UDPTransport struct {
 	local AffinityGroupRPC
 }
 
-// NewUDPTransport inits a new UDPTransport using the given connection
+// NewUDPTransport inits a new UDPTransport using the given server connection.
+// Nil can be supplied if the transport is only used as a client and is not a
+// cluster member
 func NewUDPTransport(ln *net.UDPConn) *UDPTransport {
 	return &UDPTransport{conn: ln}
 }
-
-// Ping pings a host returning its coordinates and round-trip-time
-// func (trans *UDPTransport) Ping(host string) (*vivaldi.Coordinate, time.Duration, error) {
-// 	start := time.Now()
-//
-// 	conn, err := trans.getConn(host)
-// 	if err != nil {
-// 		return nil, 0, err
-// 	}
-//
-// 	req := []byte{reqTypePing}
-// 	if _, err = conn.Write(req); err != nil {
-// 		return nil, 0, err
-// 	}
-//
-// 	resp, err := trans.readResponse(conn)
-// 	if err != nil {
-// 		return nil, 0, err
-// 	}
-//
-// 	var coords vivaldi.Coordinate
-// 	if err = proto.Unmarshal(resp, &coords); err == nil {
-// 		return &coords, time.Since(start), nil
-// 	}
-//
-// 	return nil, time.Since(start), err
-// }
 
 // Lookup performs a lookup request on a host for a key
 func (trans *UDPTransport) Lookup(host string, key []byte) ([]*hexatype.Node, error) {
@@ -89,6 +66,31 @@ func (trans *UDPTransport) Lookup(host string, key []byte) ([]*hexatype.Node, er
 	return nil, err
 }
 
+// LookupGroupNodes looksup the group nodes for a key on a remote host
+func (trans *UDPTransport) LookupGroupNodes(host string, key []byte) ([]*hexatype.Node, error) {
+	conn, err := trans.getConn(host)
+	if err != nil {
+		return nil, err
+	}
+
+	req := append([]byte{reqTypeLookupGroupNodes}, key...)
+	if _, err = conn.Write(req); err != nil {
+		return nil, err
+	}
+
+	buf, err := trans.readResponse(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	var rr ReqResp
+	if err = proto.Unmarshal(buf, &rr); err == nil {
+		return rr.Nodes, nil
+	}
+
+	return nil, err
+}
+
 // Insert inserts a key to node mapping on a remote host
 func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost) error {
 
@@ -98,11 +100,6 @@ func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost) erro
 	}
 
 	data := append(tuple, key...)
-	// data, err := proto.Marshal(&ReqResp{Key: key, Nodes: []*hexatype.Node{node}})
-	// if err != nil {
-	// 	return err
-	// }
-	//
 	req := append([]byte{reqTypeInsert}, data...)
 	if _, err = conn.Write(req); err != nil {
 		return err
@@ -156,11 +153,20 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 
 		resp, err = proto.Marshal(rr)
 
+	case reqTypeLookupGroupNodes:
+		rr := &ReqResp{}
+		if rr.Nodes, err = trans.local.LookupGroupNodes(msg); err != nil {
+			break
+		}
+
+		if len(rr.Nodes) == 0 {
+			err = fmt.Errorf("no nodes found")
+			break
+		}
+
+		resp, err = proto.Marshal(rr)
+
 	case reqTypeInsert:
-		// var rr ReqResp
-		// if err = proto.Unmarshal(msg, &rr); err != nil {
-		// 	break
-		// }
 		if len(msg) < 19 {
 			err = fmt.Errorf("insert size too small")
 			break

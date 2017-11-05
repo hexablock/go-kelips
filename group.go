@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/hexablock/hexatype"
+	"github.com/hexablock/log"
 	"github.com/hexablock/vivaldi"
 )
 
@@ -36,6 +36,20 @@ func (lrpc *localGroup) Delete(key []byte) error {
 
 func (lrpc *localGroup) Insert(key []byte, tuple TupleHost) error {
 	return lrpc.tuples.Insert(key, tuple)
+}
+
+func (lrpc *localGroup) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
+	h := lrpc.hashFunc()
+	h.Write(key)
+	sh := h.Sum(nil)
+
+	group := lrpc.groups.get(sh)
+	n := group.Nodes()
+	nodes := make([]*hexatype.Node, 0, len(n))
+	for _, nd := range n {
+		nodes = append(nodes, &nd)
+	}
+	return nodes, nil
 }
 
 func (lrpc *localGroup) Lookup(key []byte) ([]*hexatype.Node, error) {

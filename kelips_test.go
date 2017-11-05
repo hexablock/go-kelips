@@ -7,6 +7,7 @@ import (
 
 func fastTestConf(addr string) *Config {
 	c1 := DefaultConfig(addr)
+	c1.Meta["host"] = addr
 	//c1.PingMax = 300 * time.Millisecond
 	//c1.PingMin = 100 * time.Millisecond
 	return c1
@@ -52,7 +53,7 @@ func Test_Kelips(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//Allow ping
+	// Allow ping
 	<-time.After(1 * time.Second)
 
 	n1, err := k1.Lookup(testkey)

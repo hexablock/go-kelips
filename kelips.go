@@ -55,6 +55,8 @@ func (conf *Config) metaBytes() []byte {
 // AffinityGroupRPC implements an interface for local rpc's used by the
 // transport
 type AffinityGroupRPC interface {
+	LookupGroupNodes(key []byte) ([]*hexatype.Node, error)
+
 	// Lookup nodes from the local view
 	Lookup(key []byte) ([]*hexatype.Node, error)
 
@@ -67,6 +69,7 @@ type AffinityGroupRPC interface {
 
 // Transport implements RPC's needed by kelips
 type Transport interface {
+	LookupGroupNodes(host string, key []byte) ([]*hexatype.Node, error)
 	Lookup(host string, key []byte) ([]*hexatype.Node, error)
 	Insert(host string, key []byte, tuple TupleHost) error
 	Delete(host string, key []byte) error
@@ -140,15 +143,6 @@ func (kelips *Kelips) init() {
 
 }
 
-// LookupGroup returns the affinity group for the key
-func (kelips *Kelips) LookupGroup(key []byte) AffinityGroup {
-	h := kelips.conf.HashFunc()
-	h.Write(key)
-	sh := h.Sum(nil)
-
-	return kelips.groups.get(sh)
-}
-
 // Insert inserts a key and associated tuple.  If the key belongs to a foreign
 // group, the insert is forwarded to a node in that group and its response
 // is returned.  If the TupleHost is not known it will not be returned in a
@@ -216,6 +210,11 @@ func (kelips *Kelips) LocalNode() hexatype.Node {
 	group := kelips.groups[kelips.local.idx]
 	n, _ := group.getNode(kelips.conf.Hostname)
 	return *n
+}
+
+// LookupGroupNodes returns all nodes in a group for the key
+func (kelips *Kelips) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
+	return kelips.local.LookupGroupNodes(key)
 }
 
 // Lookup hashes the key and finds its affinity group.  If the group is local
