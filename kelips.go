@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hexablock/hexatype"
+	"github.com/hexablock/log"
 	"github.com/hexablock/vivaldi"
 )
 
@@ -141,6 +142,7 @@ func (kelips *Kelips) init() {
 
 	kelips.trans.Register(kelips.local)
 
+	log.Printf("[INFO] Kelips group=%d/%d id=%x", local.index, c.NumGroups, local.id)
 }
 
 // Insert inserts a key and associated tuple.  If the key belongs to a foreign

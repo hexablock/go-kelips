@@ -45,10 +45,12 @@ func (lrpc *localGroup) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
 
 	group := lrpc.groups.get(sh)
 	n := group.Nodes()
-	nodes := make([]*hexatype.Node, 0, len(n))
-	for _, nd := range n {
-		nodes = append(nodes, &nd)
+
+	nodes := make([]*hexatype.Node, len(n))
+	for i := range n {
+		nodes[i] = &n[i]
 	}
+
 	return nodes, nil
 }
 
@@ -132,6 +134,7 @@ func (group *affinityGroup) Nodes() []hexatype.Node {
 		n = append(n, *node)
 	}
 	group.mu.RUnlock()
+
 	return n
 }
 
