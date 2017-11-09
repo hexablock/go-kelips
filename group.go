@@ -16,26 +16,95 @@ var (
 	errNodeExists = errors.New("node exists")
 )
 
+type propReq struct {
+	typ   int
+	key   []byte
+	tuple TupleHost
+}
+
 type localGroup struct {
+	local *hexatype.Node
+
 	// Local group index
 	idx int
+
+	// hash function
+	hashFunc func() hash.Hash
 
 	// Group tuples
 	tuples *InmemTuples
 
-	// all groups
+	// All groups
 	groups affinityGroups
 
-	// hash function
-	hashFunc func() hash.Hash
+	// propogation request channel
+	propReqs chan *propReq
+
+	// Network transport
+	trans Transport
 }
 
-func (lrpc *localGroup) Delete(key []byte) error {
-	return lrpc.tuples.Delete(key)
+func (lrpc *localGroup) Delete(key []byte, propogate bool) error {
+	err := lrpc.tuples.Delete(key)
+	if err == nil && propogate {
+		lrpc.propReqs <- &propReq{typ: 0, key: key}
+	}
+	return err
 }
 
-func (lrpc *localGroup) Insert(key []byte, tuple TupleHost) error {
-	return lrpc.tuples.Insert(key, tuple)
+func (lrpc *localGroup) Insert(key []byte, tuple TupleHost, propogate bool) error {
+	err := lrpc.tuples.Insert(key, tuple)
+	if err == nil && propogate {
+		lrpc.propReqs <- &propReq{typ: 1, key: key, tuple: tuple}
+	}
+
+	return err
+}
+
+func (lrpc *localGroup) propogateDelete(key []byte, nodes []hexatype.Node) {
+	var err error
+	for _, node := range nodes {
+		if node.Host() == lrpc.local.Host() {
+			continue
+		}
+		if err = lrpc.trans.Delete(node.Host(), key, false); err != nil {
+			log.Printf("[ERROR] Failed to propogate: %s host=%s key=%x", err, node.Host(), key)
+		}
+	}
+}
+
+func (lrpc *localGroup) propogateInsert(prop *propReq, nodes []hexatype.Node) {
+	var err error
+	for _, node := range nodes {
+		if node.Host() == lrpc.local.Host() {
+			continue
+		}
+		if err = lrpc.trans.Insert(node.Host(), prop.key, prop.tuple, false); err != nil {
+			log.Printf("[ERROR] Failed to propogate host=%s key=%x", node.Host(), prop.key)
+		}
+	}
+}
+
+// propogate inserts and deletes to the remaining group nodes
+func (lrpc *localGroup) propogate() {
+	for prop := range lrpc.propReqs {
+		h := lrpc.hashFunc()
+		h.Write(prop.key)
+		id := h.Sum(nil)
+		group := lrpc.groups.get(id)
+		nodes := group.Nodes()
+
+		switch prop.typ {
+		case 0:
+			lrpc.propogateDelete(prop.key, nodes)
+		case 1:
+			lrpc.propogateInsert(prop, nodes)
+		default:
+			// unrecognized
+			continue
+		}
+
+	}
 }
 
 func (lrpc *localGroup) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {

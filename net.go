@@ -92,7 +92,7 @@ func (trans *UDPTransport) LookupGroupNodes(host string, key []byte) ([]*hexatyp
 }
 
 // Insert inserts a key to node mapping on a remote host
-func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost) error {
+func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost, propogate bool) error {
 
 	conn, err := trans.getConn(host)
 	if err != nil {
@@ -100,7 +100,13 @@ func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost) erro
 	}
 
 	data := append(tuple, key...)
-	req := append([]byte{reqTypeInsert}, data...)
+	var req []byte
+	if propogate {
+		req = append([]byte{reqTypeInsert, byte(1)}, data...)
+	} else {
+		req = append([]byte{reqTypeInsert, byte(0)}, data...)
+	}
+
 	if _, err = conn.Write(req); err != nil {
 		return err
 	}
@@ -110,13 +116,19 @@ func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost) erro
 }
 
 // Delete a key on the the host removing all node mappings for the key
-func (trans *UDPTransport) Delete(host string, key []byte) error {
+func (trans *UDPTransport) Delete(host string, key []byte, propogate bool) error {
 	conn, err := trans.getConn(host)
 	if err != nil {
 		return err
 	}
 
-	req := append([]byte{reqTypeDelete}, key...)
+	var req []byte
+	if propogate {
+		req = append([]byte{reqTypeDelete, byte(1)}, key...)
+	} else {
+		req = append([]byte{reqTypeDelete, byte(0)}, key...)
+	}
+
 	if _, err = conn.Write(req); err != nil {
 		return err
 	}
@@ -129,6 +141,7 @@ func (trans *UDPTransport) Delete(host string, key []byte) error {
 // connections
 func (trans *UDPTransport) Register(group AffinityGroupRPC) {
 	trans.local = group
+	log.Println("[INFO] DHT serving on:", trans.conn.LocalAddr())
 	go trans.listen()
 }
 
@@ -167,16 +180,27 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 		resp, err = proto.Marshal(rr)
 
 	case reqTypeInsert:
-		if len(msg) < 19 {
+		if len(msg) < 20 {
 			err = fmt.Errorf("insert size too small")
 			break
 		}
-		tuple := TupleHost(msg[:18])
-		key := msg[18:]
-		err = trans.local.Insert(key, tuple)
+		prop := msg[0]
+		tuple := TupleHost(msg[1:19])
+		key := msg[19:]
+
+		if prop == byte(1) {
+			err = trans.local.Insert(key, tuple, true)
+		} else {
+			err = trans.local.Insert(key, tuple, false)
+		}
 
 	case reqTypeDelete:
-		err = trans.local.Delete(msg)
+		prop := msg[0]
+		if prop == byte(1) {
+			err = trans.local.Delete(msg[1:], true)
+		} else {
+			err = trans.local.Delete(msg[1:], false)
+		}
 
 	default:
 		err = fmt.Errorf("unknown request: %x '%s'", typ, msg)

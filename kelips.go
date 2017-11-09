@@ -27,6 +27,9 @@ type Config struct {
 	Sector string
 	Zone   string
 	Meta   map[string]string
+
+	// Event delegate
+	Delegate Delegate
 }
 
 // DefaultConfig returns a minimum required config
@@ -53,6 +56,13 @@ func (conf *Config) metaBytes() []byte {
 	return []byte(out[:len(out)-1])
 }
 
+type Delegate interface {
+	// Called when a key tuple is inserted
+	TupleInsert(key []byte, tuple TupleHost)
+	// Called when a key tuple is deleted
+	TupleDelete(key []byte)
+}
+
 // AffinityGroupRPC implements an interface for local rpc's used by the
 // transport
 type AffinityGroupRPC interface {
@@ -62,18 +72,18 @@ type AffinityGroupRPC interface {
 	Lookup(key []byte) ([]*hexatype.Node, error)
 
 	// Insert to local group
-	Insert(key []byte, tuple TupleHost) error
+	Insert(key []byte, tuple TupleHost, propogate bool) error
 
 	// Delete from local group
-	Delete(key []byte) error
+	Delete(key []byte, propogate bool) error
 }
 
 // Transport implements RPC's needed by kelips
 type Transport interface {
 	LookupGroupNodes(host string, key []byte) ([]*hexatype.Node, error)
 	Lookup(host string, key []byte) ([]*hexatype.Node, error)
-	Insert(host string, key []byte, tuple TupleHost) error
-	Delete(host string, key []byte) error
+	Insert(host string, key []byte, tuple TupleHost, propogate bool) error
+	Delete(host string, key []byte, propogate bool) error
 	Register(AffinityGroupRPC)
 }
 
@@ -113,6 +123,8 @@ func Create(conf *Config, remote Transport) *Kelips {
 
 	k.init()
 
+	go k.local.propogate()
+
 	return k
 }
 
@@ -134,10 +146,13 @@ func (kelips *Kelips) init() {
 	local.addNode(localNode, true)
 
 	kelips.local = &localGroup{
+		local:    localNode,
 		idx:      local.index,
 		tuples:   kelips.tuples,
 		groups:   kelips.groups,
 		hashFunc: c.HashFunc,
+		trans:    kelips.trans,
+		propReqs: make(chan *propReq, 32),
 	}
 
 	kelips.trans.Register(kelips.local)
@@ -160,14 +175,15 @@ func (kelips *Kelips) Insert(key []byte, tuple TupleHost) (err error) {
 	// Get key group
 	group := kelips.groups.get(keysh)
 	if group.index == kelips.local.idx {
-		return kelips.local.Insert(key, tuple)
+		err = kelips.local.Insert(key, tuple, true)
+		return err
 	}
 
 	// Handle foreign group
 	nodes := group.Nodes()
 	for _, n := range nodes {
-		// First successful one
-		if er := kelips.trans.Insert(n.Host(), key, tuple); er != nil {
+		// Return on first successful one
+		if er := kelips.trans.Insert(n.Host(), key, tuple, true); er != nil {
 			err = er
 			continue
 		}
@@ -190,14 +206,15 @@ func (kelips *Kelips) Delete(key []byte) (err error) {
 	// Get key group
 	group := kelips.groups.get(keysh)
 	if group.index == kelips.local.idx {
-		return kelips.local.Delete(key)
+		err = kelips.local.Delete(key, true)
+		return err
 	}
 
 	// Handle foreign group
 	nodes := group.Nodes()
 	for _, n := range nodes {
 		// First successful one
-		if er := kelips.trans.Delete(n.Host(), key); er != nil {
+		if er := kelips.trans.Delete(n.Host(), key, true); er != nil {
 			err = er
 			continue
 		}

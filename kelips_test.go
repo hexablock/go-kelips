@@ -1,9 +1,18 @@
 package kelips
 
 import (
+	"os"
 	"testing"
 	"time"
+
+	"github.com/hexablock/log"
 )
+
+func TestMain(m *testing.M) {
+	log.SetLevel("DEBUG")
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	os.Exit(m.Run())
+}
 
 func fastTestConf(addr string) *Config {
 	c1 := DefaultConfig(addr)
