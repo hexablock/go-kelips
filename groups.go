@@ -59,6 +59,8 @@ func (ct affinityGroups) iterNodes(f func(hexatype.Node) bool) {
 
 }
 
+// nextClosestGroup gets the next closest group containing nodes working its way
+// up groups and wrapping back around the bottom
 func (ct affinityGroups) nextClosestGroup(g *affinityGroup) *affinityGroup {
 	group := g
 	// Handle foreign group
@@ -81,7 +83,6 @@ RETRY:
 			goto RETRY
 		}
 
-		//return fmt.Errorf("no nodes found for key: %x", key)
 		return nil
 	}
 

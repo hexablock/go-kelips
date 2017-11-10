@@ -26,10 +26,9 @@ type Config struct {
 	Region string
 	Sector string
 	Zone   string
-	Meta   map[string]string
 
-	// Event delegate
-	//Delegate Delegate
+	// Meta is serialized to binary and made part of the node object
+	Meta map[string]string
 }
 
 // DefaultConfig returns a minimum required config
@@ -55,13 +54,6 @@ func (conf *Config) metaBytes() []byte {
 	}
 	return []byte(out[:len(out)-1])
 }
-
-// type Delegate interface {
-// 	// Called when a key tuple is inserted
-// 	TupleInsert(key []byte, tuple TupleHost)
-// 	// Called when a key tuple is deleted
-// 	TupleDelete(key []byte)
-// }
 
 // AffinityGroupRPC implements an interface for local rpc's used by the
 // transport
@@ -160,6 +152,13 @@ func (kelips *Kelips) init() {
 	log.Printf("[INFO] Kelips group=%d/%d id=%x", local.index, c.NumGroups, local.id)
 }
 
+// LocalNode returns the local node by performing a lookup
+func (kelips *Kelips) LocalNode() hexatype.Node {
+	group := kelips.groups[kelips.local.idx]
+	n, _ := group.getNode(kelips.conf.Hostname)
+	return *n
+}
+
 // Insert inserts a key and associated tuple.  If the key belongs to a foreign
 // group, the insert is forwarded to a node in that group and its response
 // is returned.  If the TupleHost is not known it will not be returned in a
@@ -228,13 +227,6 @@ func (kelips *Kelips) Delete(key []byte) (err error) {
 	return err
 }
 
-// LocalNode returns the local node by performing a lookup
-func (kelips *Kelips) LocalNode() hexatype.Node {
-	group := kelips.groups[kelips.local.idx]
-	n, _ := group.getNode(kelips.conf.Hostname)
-	return *n
-}
-
 // LookupGroupNodes returns all nodes in a group for the key
 func (kelips *Kelips) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
 	return kelips.local.LookupGroupNodes(key)
@@ -275,7 +267,7 @@ func (kelips *Kelips) Lookup(key []byte) ([]*hexatype.Node, error) {
 
 // PingNode sets the coords and rtt on a node and updates the heartbeat count
 func (kelips *Kelips) PingNode(hostname string, coord *vivaldi.Coordinate, rtt time.Duration) error {
-	group := kelips.getGroup(hostname)
+	group := kelips.getHostGroup(hostname)
 	return group.pingNode(hostname, coord, rtt)
 }
 
@@ -290,7 +282,7 @@ func (kelips *Kelips) AddNode(node *hexatype.Node, force bool) error {
 // RemoveNode removes a node from the DHT.  This will remove the node from the
 // local nodes view as well as remove all references in the tuples
 func (kelips *Kelips) RemoveNode(hostname string) error {
-	group := kelips.getGroup(hostname)
+	group := kelips.getHostGroup(hostname)
 	if group.index == kelips.local.idx {
 		// If local remove all tuple references
 		kelips.tuples.ExpireHost(NewTupleHost(hostname))
@@ -299,7 +291,7 @@ func (kelips *Kelips) RemoveNode(hostname string) error {
 	return group.removeNode(hostname)
 }
 
-func (kelips *Kelips) getGroup(host string) *affinityGroup {
+func (kelips *Kelips) getHostGroup(host string) *affinityGroup {
 	tuple := NewTupleHost(host)
 	id := tuple.ID(kelips.conf.HashFunc())
 	return kelips.groups.get(id)
@@ -328,7 +320,10 @@ func (kelips *Kelips) Seed(snapshot *Snapshot) error {
 
 	for _, tuple := range snapshot.Tuples {
 		for _, host := range tuple.Hosts {
-			kelips.tuples.Insert(tuple.Key, TupleHost(host))
+			tupleHost := TupleHost(host)
+			if er := kelips.Insert(tuple.Key, tupleHost); er != nil {
+				err = er
+			}
 		}
 	}
 
