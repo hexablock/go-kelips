@@ -103,18 +103,14 @@ func (ft *InmemTuples) Insert(key []byte, h TupleHost) error {
 	}
 
 	// Check if we already have the host
-	ok = false
 	for _, v := range hosts {
 		if h.String() == v.String() {
-			ok = true
-			break
+			return nil
 		}
 	}
 
-	if !ok {
-		ft.m[name] = append(hosts, h)
-		log.Printf("[INFO] Tuple added key=%x host=%s", name, h)
-	}
+	ft.m[name] = append(hosts, h)
+	log.Printf("[INFO] Tuple added key=%x host=%s", name, h)
 
 	return nil
 }
@@ -156,7 +152,6 @@ func (ft *InmemTuples) DeleteKeyHost(key []byte, h TupleHost) bool {
 		ft.mu.RUnlock()
 		return false
 	}
-	//l := len(hosts)
 
 	for i, v := range hosts {
 		if h.String() == v.String() {

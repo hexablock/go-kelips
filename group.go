@@ -134,8 +134,8 @@ func (lrpc *localGroup) Lookup(key []byte) ([]*hexatype.Node, error) {
 	for _, tuple := range tuples {
 		h.Reset()
 		id := tuple.ID(h)
-		tg := lrpc.groups.get(id)
-		if node, ok := tg.getNode(tuple.String()); ok {
+		group := lrpc.groups.get(id)
+		if node, ok := group.getNode(tuple.String()); ok {
 			//log.Println(node)
 			nodes = append(nodes, node)
 		}

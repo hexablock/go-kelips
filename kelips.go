@@ -29,7 +29,7 @@ type Config struct {
 	Meta   map[string]string
 
 	// Event delegate
-	Delegate Delegate
+	//Delegate Delegate
 }
 
 // DefaultConfig returns a minimum required config
@@ -56,12 +56,12 @@ func (conf *Config) metaBytes() []byte {
 	return []byte(out[:len(out)-1])
 }
 
-type Delegate interface {
-	// Called when a key tuple is inserted
-	TupleInsert(key []byte, tuple TupleHost)
-	// Called when a key tuple is deleted
-	TupleDelete(key []byte)
-}
+// type Delegate interface {
+// 	// Called when a key tuple is inserted
+// 	TupleInsert(key []byte, tuple TupleHost)
+// 	// Called when a key tuple is deleted
+// 	TupleDelete(key []byte)
+// }
 
 // AffinityGroupRPC implements an interface for local rpc's used by the
 // transport
@@ -165,7 +165,7 @@ func (kelips *Kelips) init() {
 // is returned.  If the TupleHost is not known it will not be returned in a
 // lookup though will still be in the tuple store.  Once the node is known/alive
 // it will be returned in lookups
-func (kelips *Kelips) Insert(key []byte, tuple TupleHost) (err error) {
+func (kelips *Kelips) Insert(key []byte, tuple TupleHost) error {
 	h := kelips.conf.HashFunc()
 
 	// Hash key
@@ -175,12 +175,17 @@ func (kelips *Kelips) Insert(key []byte, tuple TupleHost) (err error) {
 	// Get key group
 	group := kelips.groups.get(keysh)
 	if group.index == kelips.local.idx {
-		err = kelips.local.Insert(key, tuple, true)
-		return err
+		return kelips.local.Insert(key, tuple, true)
 	}
 
 	// Handle foreign group
+	group = kelips.groups.nextClosestGroup(group)
+	if group == nil {
+		return fmt.Errorf("no nodes found for key: %x", key)
+	}
 	nodes := group.Nodes()
+
+	var err error
 	for _, n := range nodes {
 		// Return on first successful one
 		if er := kelips.trans.Insert(n.Host(), key, tuple, true); er != nil {
@@ -189,7 +194,6 @@ func (kelips *Kelips) Insert(key []byte, tuple TupleHost) (err error) {
 		}
 		return nil
 	}
-
 	return err
 }
 
@@ -249,7 +253,13 @@ func (kelips *Kelips) Lookup(key []byte) ([]*hexatype.Node, error) {
 		return kelips.local.Lookup(key)
 	}
 
+	// Handle foreign group
+	group = kelips.groups.nextClosestGroup(group)
+	if group == nil {
+		return nil, fmt.Errorf("nodes not found: %x", key)
+	}
 	nodes := group.Nodes()
+
 	var err error
 	for _, n := range nodes {
 		// First successful one

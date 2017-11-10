@@ -59,6 +59,35 @@ func (ct affinityGroups) iterNodes(f func(hexatype.Node) bool) {
 
 }
 
+func (ct affinityGroups) nextClosestGroup(g *affinityGroup) *affinityGroup {
+	group := g
+	// Handle foreign group
+	nodes := group.Nodes()
+
+RETRY:
+	if len(nodes) == 0 {
+		//
+		// TODO: Insert into the next closest group
+		//
+		if group.index == 0 {
+			group = ct[len(ct)-1]
+			nodes = group.Nodes()
+		} else {
+			group = ct[group.index-1]
+			nodes = group.Nodes()
+		}
+
+		if group.index != g.index {
+			goto RETRY
+		}
+
+		//return fmt.Errorf("no nodes found for key: %x", key)
+		return nil
+	}
+
+	return group
+}
+
 func genAffinityGroups(numGroups int64, hashSize int64) affinityGroups {
 	// Calculate the size of the keyspace
 	var keyspace big.Int

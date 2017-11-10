@@ -42,10 +42,10 @@ func Test_Kelips(t *testing.T) {
 	testkey := []byte("key")
 	testkey1 := []byte("test-key-test")
 
-	if err := k1.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
+	if err := k1.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
 		t.Fatal(err)
 	}
-	if err := k2.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
+	if err := k2.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54541)); err != nil {
 		t.Fatal(err)
 	}
 	if err := k3.Insert(testkey, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
@@ -55,10 +55,10 @@ func Test_Kelips(t *testing.T) {
 	if err := k1.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
 		t.Fatal(err)
 	}
-	if err := k2.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
+	if err := k2.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54541)); err != nil {
 		t.Fatal(err)
 	}
-	if err := k3.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54540)); err != nil {
+	if err := k3.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54542)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +79,10 @@ func Test_Kelips(t *testing.T) {
 	n3, err = k3.Lookup(testkey1)
 	t.Log(n3, err)
 
-	k1.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54541))
+	if _, err = k2.Lookup([]byte("non-existent")); err == nil {
+		t.Fatal("lookup should fail")
+	}
+
 	k1.Insert(testkey1, NewTupleHostFromHostPort("127.0.0.1", 54542))
 
 	t.Log(k1.groups[0])
