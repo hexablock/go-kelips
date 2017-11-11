@@ -13,9 +13,9 @@ import (
 
 // Config holds the kelips config to initialize the dht
 type Config struct {
-	// Hostname used to compute the hash.  This may be different from the
+	// AdvertiseHost used to compute the hash.  This may be different from the
 	// transport address
-	Hostname string
+	AdvertiseHost string
 
 	// Number of affinity groups i.e. k value
 	NumGroups int
@@ -34,13 +34,13 @@ type Config struct {
 // DefaultConfig returns a minimum required config
 func DefaultConfig(host string) *Config {
 	return &Config{
-		Hostname:  host,
-		NumGroups: 2,
-		HashFunc:  sha256.New,
-		Region:    "region1",
-		Sector:    "sector1",
-		Zone:      "zone1",
-		Meta:      make(map[string]string),
+		AdvertiseHost: host,
+		NumGroups:     2,
+		HashFunc:      sha256.New,
+		Region:        "region1",
+		Sector:        "sector1",
+		Zone:          "zone1",
+		Meta:          make(map[string]string),
 	}
 }
 
@@ -124,7 +124,7 @@ func (kelips *Kelips) init() {
 	c := kelips.conf
 	kelips.groups = genAffinityGroups(int64(c.NumGroups), int64(c.HashFunc().Size()))
 
-	tuple := NewTupleHost(kelips.conf.Hostname)
+	tuple := NewTupleHost(kelips.conf.AdvertiseHost)
 	localNode := &hexatype.Node{
 		Address: tuple,
 		Region:  kelips.conf.Region,
@@ -155,7 +155,7 @@ func (kelips *Kelips) init() {
 // LocalNode returns the local node by performing a lookup
 func (kelips *Kelips) LocalNode() hexatype.Node {
 	group := kelips.groups[kelips.local.idx]
-	n, _ := group.getNode(kelips.conf.Hostname)
+	n, _ := group.getNode(kelips.conf.AdvertiseHost)
 	return *n
 }
 
