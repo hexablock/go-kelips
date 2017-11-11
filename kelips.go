@@ -115,7 +115,7 @@ func Create(conf *Config, remote Transport) *Kelips {
 
 	k.init()
 
-	go k.local.propogate()
+	go k.local.propogate(conf.HashFunc)
 
 	return k
 }

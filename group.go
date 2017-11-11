@@ -47,7 +47,13 @@ type localGroup struct {
 func (lrpc *localGroup) Delete(key []byte, propogate bool) error {
 	err := lrpc.tuples.Delete(key)
 	if err == nil && propogate {
-		lrpc.propReqs <- &propReq{typ: 0, key: key}
+		prop := &propReq{
+			typ: 0,
+			key: make([]byte, len(key)),
+		}
+		copy(prop.key, key)
+
+		lrpc.propReqs <- prop
 	}
 	return err
 }
@@ -55,7 +61,15 @@ func (lrpc *localGroup) Delete(key []byte, propogate bool) error {
 func (lrpc *localGroup) Insert(key []byte, tuple TupleHost, propogate bool) error {
 	err := lrpc.tuples.Insert(key, tuple)
 	if err == nil && propogate {
-		lrpc.propReqs <- &propReq{typ: 1, key: key, tuple: tuple}
+		prop := &propReq{
+			typ:   1,
+			key:   make([]byte, len(key)),
+			tuple: make([]byte, len(tuple)),
+		}
+		copy(prop.key, key)
+		copy(prop.tuple, tuple)
+
+		lrpc.propReqs <- prop
 	}
 
 	return err
@@ -73,24 +87,28 @@ func (lrpc *localGroup) propogateDelete(key []byte, nodes []hexatype.Node) {
 	}
 }
 
-func (lrpc *localGroup) propogateInsert(prop *propReq, nodes []hexatype.Node) {
-	var err error
+func (lrpc *localGroup) propogateInsert(key []byte, tuple TupleHost, nodes []hexatype.Node) {
 	for _, node := range nodes {
 		if node.Host() == lrpc.local.Host() {
 			continue
 		}
-		if err = lrpc.trans.Insert(node.Host(), prop.key, prop.tuple, false); err != nil {
-			log.Printf("[ERROR] Failed to propogate host=%s key=%x", node.Host(), prop.key)
+		if err := lrpc.trans.Insert(node.Host(), key, tuple, false); err != nil {
+			log.Printf("[ERROR] Failed to propogate insert: %v host=%s key=%x",
+				err, node.Host(), key)
 		}
 	}
 }
 
 // propogate inserts and deletes to the remaining group nodes
-func (lrpc *localGroup) propogate() {
+func (lrpc *localGroup) propogate(hashFunc func() hash.Hash) {
+	h := hashFunc()
+
 	for prop := range lrpc.propReqs {
-		h := lrpc.hashFunc()
+
+		h.Reset()
 		h.Write(prop.key)
 		id := h.Sum(nil)
+
 		group := lrpc.groups.get(id)
 		nodes := group.Nodes()
 
@@ -98,7 +116,7 @@ func (lrpc *localGroup) propogate() {
 		case 0:
 			lrpc.propogateDelete(prop.key, nodes)
 		case 1:
-			lrpc.propogateInsert(prop, nodes)
+			lrpc.propogateInsert(prop.key, prop.tuple, nodes)
 		default:
 			// unrecognized
 			continue

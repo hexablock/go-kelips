@@ -12,7 +12,7 @@ kelipsd:
 	go build -o kelipsd examples/main.go
 
 test:
-	go test -v -cover .
+	go test -race -v -cover .
 
 protoc:
 	protoc structs.proto -I ./ -I ../../../ --go_out=plugins=grpc:.
