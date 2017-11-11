@@ -45,7 +45,7 @@ func Test_Client(t *testing.T) {
 		t.Fatal("should fail")
 	}
 
-	if err = client.Delete(testkey); err != nil {
+	if err = client.Delete(testkey, NewTupleHostFromHostPort("127.0.0.1", 54940)); err != nil {
 		t.Fatal(err)
 	}
 	_, err = client.Lookup(testkey)

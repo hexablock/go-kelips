@@ -116,17 +116,19 @@ func (trans *UDPTransport) Insert(host string, key []byte, tuple TupleHost, prop
 }
 
 // Delete a key on the the host removing all node mappings for the key
-func (trans *UDPTransport) Delete(host string, key []byte, propogate bool) error {
+func (trans *UDPTransport) Delete(host string, key []byte, tuple TupleHost, propogate bool) error {
 	conn, err := trans.getConn(host)
 	if err != nil {
 		return err
 	}
 
+	d := append(tuple, key...)
+
 	var req []byte
 	if propogate {
-		req = append([]byte{reqTypeDelete, byte(1)}, key...)
+		req = append([]byte{reqTypeDelete, byte(1)}, d...)
 	} else {
-		req = append([]byte{reqTypeDelete, byte(0)}, key...)
+		req = append([]byte{reqTypeDelete, byte(0)}, d...)
 	}
 
 	if _, err = conn.Write(req); err != nil {
@@ -195,11 +197,18 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 		}
 
 	case reqTypeDelete:
+		if len(msg) < 20 {
+			err = fmt.Errorf("delete size too small: %d", len(msg))
+			break
+		}
+
 		prop := msg[0]
+		tuple := TupleHost(msg[1:19])
+		key := msg[19:]
 		if prop == byte(1) {
-			err = trans.local.Delete(msg[1:], true)
+			err = trans.local.Delete(key, tuple, true)
 		} else {
-			err = trans.local.Delete(msg[1:], false)
+			err = trans.local.Delete(key, tuple, false)
 		}
 
 	default:

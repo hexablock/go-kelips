@@ -44,18 +44,21 @@ type localGroup struct {
 	trans Transport
 }
 
-func (lrpc *localGroup) Delete(key []byte, propogate bool) error {
-	err := lrpc.tuples.Delete(key)
-	if err == nil && propogate {
+func (lrpc *localGroup) Delete(key []byte, tuple TupleHost, propogate bool) error {
+	ok := lrpc.tuples.DeleteKeyHost(key, tuple)
+	//err := lrpc.tuples.Delete(key)
+	if ok && propogate {
 		prop := &propReq{
-			typ: 0,
-			key: make([]byte, len(key)),
+			typ:   0,
+			key:   make([]byte, len(key)),
+			tuple: make([]byte, len(tuple)),
 		}
 		copy(prop.key, key)
+		copy(prop.tuple, tuple)
 
 		lrpc.propReqs <- prop
 	}
-	return err
+	return nil
 }
 
 func (lrpc *localGroup) Insert(key []byte, tuple TupleHost, propogate bool) error {
@@ -75,13 +78,13 @@ func (lrpc *localGroup) Insert(key []byte, tuple TupleHost, propogate bool) erro
 	return err
 }
 
-func (lrpc *localGroup) propogateDelete(key []byte, nodes []hexatype.Node) {
+func (lrpc *localGroup) propogateDelete(key []byte, tuple TupleHost, nodes []hexatype.Node) {
 	var err error
 	for _, node := range nodes {
 		if node.Host() == lrpc.local.Host() {
 			continue
 		}
-		if err = lrpc.trans.Delete(node.Host(), key, false); err != nil {
+		if err = lrpc.trans.Delete(node.Host(), key, tuple, false); err != nil {
 			log.Printf("[ERROR] Failed to propogate: %s host=%s key=%x", err, node.Host(), key)
 		}
 	}
@@ -114,7 +117,7 @@ func (lrpc *localGroup) propogate(hashFunc func() hash.Hash) {
 
 		switch prop.typ {
 		case 0:
-			lrpc.propogateDelete(prop.key, nodes)
+			lrpc.propogateDelete(prop.key, prop.tuple, nodes)
 		case 1:
 			lrpc.propogateInsert(prop.key, prop.tuple, nodes)
 		default:

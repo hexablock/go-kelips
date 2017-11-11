@@ -52,7 +52,7 @@ func (client *Client) Insert(key []byte, tuple TupleHost) error {
 }
 
 // Delete sends a delete request to delete a key
-func (client *Client) Delete(key []byte) error {
+func (client *Client) Delete(key []byte, tuple TupleHost) error {
 	host := client.getpeer()
-	return client.trans.Delete(host, key, true)
+	return client.trans.Delete(host, key, tuple, true)
 }

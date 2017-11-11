@@ -67,7 +67,7 @@ type AffinityGroupRPC interface {
 	Insert(key []byte, tuple TupleHost, propogate bool) error
 
 	// Delete from local group
-	Delete(key []byte, propogate bool) error
+	Delete(key []byte, tuple TupleHost, propogate bool) error
 }
 
 // Transport implements RPC's needed by kelips
@@ -75,7 +75,7 @@ type Transport interface {
 	LookupGroupNodes(host string, key []byte) ([]*hexatype.Node, error)
 	Lookup(host string, key []byte) ([]*hexatype.Node, error)
 	Insert(host string, key []byte, tuple TupleHost, propogate bool) error
-	Delete(host string, key []byte, propogate bool) error
+	Delete(host string, key []byte, tuple TupleHost, propogate bool) error
 	Register(AffinityGroupRPC)
 }
 
@@ -199,7 +199,7 @@ func (kelips *Kelips) Insert(key []byte, tuple TupleHost) error {
 // Delete deletes a key and all assoicated tuples.  If the key belongs to a
 // foreign group the delete is forwarded to a node in that group and its
 // response is returned
-func (kelips *Kelips) Delete(key []byte) (err error) {
+func (kelips *Kelips) Delete(key []byte, tuple TupleHost) (err error) {
 	h := kelips.conf.HashFunc()
 
 	// Hash key
@@ -209,7 +209,7 @@ func (kelips *Kelips) Delete(key []byte) (err error) {
 	// Get key group
 	group := kelips.groups.get(keysh)
 	if group.index == kelips.local.idx {
-		err = kelips.local.Delete(key, true)
+		err = kelips.local.Delete(key, tuple, true)
 		return err
 	}
 
@@ -217,7 +217,7 @@ func (kelips *Kelips) Delete(key []byte) (err error) {
 	nodes := group.Nodes()
 	for _, n := range nodes {
 		// First successful one
-		if er := kelips.trans.Delete(n.Host(), key, true); er != nil {
+		if er := kelips.trans.Delete(n.Host(), key, tuple, true); er != nil {
 			err = er
 			continue
 		}

@@ -67,7 +67,7 @@ func (group *MockAffinityGroupRPC) Insert(key []byte, host TupleHost, prop bool)
 }
 
 // Delete from local group
-func (group *MockAffinityGroupRPC) Delete(key []byte, prop bool) error {
+func (group *MockAffinityGroupRPC) Delete(key []byte, tuple TupleHost, prop bool) error {
 	group.mu.Lock()
 	defer group.mu.Unlock()
 
@@ -129,7 +129,7 @@ func Test_UDPTransport(t *testing.T) {
 		t.Fatal("wrong host", hosts[0].Host())
 	}
 
-	if err = t2.Delete("127.0.0.1:23457", []byte("key"), false); err != nil {
+	if err = t2.Delete("127.0.0.1:23457", []byte("key"), NewTupleHostFromHostPort("127.0.0.1", 23456), false); err != nil {
 		t.Fatal(err)
 	}
 
