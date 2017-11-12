@@ -253,7 +253,7 @@ func (group *affinityGroup) pingNode(hostname string, coord *vivaldi.Coordinate,
 
 	node.Heartbeats++
 	node.LastSeen = time.Now().UnixNano()
-	node.Coordinates = coord.Clone()
+	node.Coordinates = coord
 	group.m[hostname] = node
 
 	group.mu.Unlock()
