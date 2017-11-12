@@ -118,12 +118,14 @@ func (ft *InmemTuples) Insert(key []byte, h TupleHost) error {
 // Delete deletes a key removing all associated TupleHosts
 func (ft *InmemTuples) Delete(key []byte) error {
 	k := string(key)
+
 	ft.mu.Lock()
 	if _, ok := ft.m[k]; ok {
 		delete(ft.m, k)
 		ft.mu.Unlock()
 		return nil
 	}
+	ft.mu.Unlock()
 
 	return fmt.Errorf("key not found: %s", key)
 }
@@ -146,26 +148,30 @@ func (ft *InmemTuples) Get(key []byte) ([]TupleHost, error) {
 func (ft *InmemTuples) DeleteKeyHost(key []byte, h TupleHost) bool {
 	name := string(key)
 
-	ft.mu.RLock()
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+
+	//ft.mu.RLock()
 	hosts, ok := ft.m[name]
 	if !ok {
-		ft.mu.RUnlock()
+		//ft.mu.RUnlock()
 		return false
 	}
 
 	for i, v := range hosts {
 		if h.String() == v.String() {
-			ft.mu.RUnlock()
+			//ft.mu.RUnlock()
 
-			ft.mu.Lock()
+			//ft.mu.Lock()
 			ft.m[name] = append(hosts[:i], hosts[i+1:]...)
-			ft.mu.Unlock()
+			//ft.mu.Unlock()
 
 			log.Printf("[INFO] Tuple deleted key=%x host=%s", name, h)
 			return true
 		}
 	}
-	ft.mu.RUnlock()
+	//ft.mu.RUnlock()
+
 	return false
 }
 
