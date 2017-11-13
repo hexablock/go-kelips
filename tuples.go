@@ -82,9 +82,10 @@ func (ft *InmemTuples) Iter(f func(key []byte, hosts []TupleHost) bool) {
 // Count returns the total number of keys in the store
 func (ft *InmemTuples) Count() int {
 	ft.mu.RLock()
-	defer ft.mu.RUnlock()
+	c := len(ft.m)
+	ft.mu.RUnlock()
 
-	return len(ft.m)
+	return c
 }
 
 // Insert adds a new host for a name if it does not already exist.  It returns true
@@ -126,7 +127,6 @@ func (ft *InmemTuples) Delete(key []byte) error {
 		return nil
 	}
 	ft.mu.Unlock()
-
 	return fmt.Errorf("key not found: %s", key)
 }
 
