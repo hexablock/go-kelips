@@ -52,7 +52,6 @@ func (trans *UDPTransport) Lookup(host string, key []byte) ([]*hexatype.Node, er
 	if _, err = conn.Write(req); err != nil {
 		return nil, err
 	}
-
 	buf, err := trans.readResponse(conn)
 	if err != nil {
 		return nil, err

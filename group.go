@@ -241,22 +241,25 @@ func (group *affinityGroup) getNode(hostname string) (*hexatype.Node, bool) {
 
 // pingNode updates the heartbeat count, rtt, and last seen values
 func (group *affinityGroup) pingNode(hostname string, coord *vivaldi.Coordinate, rtt time.Duration) error {
-	group.mu.RLock()
+	group.mu.Lock()
+	defer group.mu.Unlock()
+
+	//group.mu.RLock()
 	node, ok := group.m[hostname]
 	if !ok {
-		group.mu.RUnlock()
+		//group.mu.RUnlock()
 		return fmt.Errorf("node not found: %s", hostname)
 	}
-	group.mu.RUnlock()
+	//group.mu.RUnlock()
 
-	group.mu.Lock()
+	//group.mu.Lock()
 
 	node.Heartbeats++
 	node.LastSeen = time.Now().UnixNano()
 	node.Coordinates = coord
-	group.m[hostname] = node
+	//group.m[hostname] = node
 
-	group.mu.Unlock()
+	//group.mu.Unlock()
 
 	//log.Println("[DEBUG] Pinged", hostname, rtt)
 
