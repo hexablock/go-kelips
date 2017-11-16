@@ -149,6 +149,7 @@ func (kelips *Kelips) init() {
 
 	kelips.trans.Register(kelips.local)
 
+	log.Printf("[INFO] Kelips node=%x", localNode.ID)
 	log.Printf("[INFO] Kelips group=%d/%d id=%x", local.index, c.NumGroups, local.id)
 }
 
