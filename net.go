@@ -1,6 +1,7 @@
 package kelips
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 
@@ -12,6 +13,7 @@ import (
 
 const (
 	reqTypeLookup byte = iota + 3
+	reqTypeLookupNodes
 	reqTypeLookupGroupNodes
 	reqTypeInsert
 	reqTypeDelete
@@ -39,6 +41,34 @@ type UDPTransport struct {
 // cluster member
 func NewUDPTransport(ln *net.UDPConn) *UDPTransport {
 	return &UDPTransport{conn: ln}
+}
+
+// LookupNodes performs a lookup request on a host returning at least min nodes
+func (trans *UDPTransport) LookupNodes(host string, key []byte, min int) ([]*hexatype.Node, error) {
+	conn, err := trans.getConn(host)
+	if err != nil {
+		return nil, err
+	}
+	// Node count
+	mb := make([]byte, 2)
+	binary.BigEndian.PutUint16(mb, uint16(min))
+
+	req := append([]byte{reqTypeLookupNodes}, append(mb, key...)...)
+	if _, err = conn.Write(req); err != nil {
+		return nil, err
+	}
+
+	buf, err := trans.readResponse(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	var rr ReqResp
+	if err = proto.Unmarshal(buf, &rr); err == nil {
+		return rr.Nodes, nil
+	}
+
+	return nil, err
 }
 
 // Lookup performs a lookup request on a host for a key
@@ -167,6 +197,19 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 
 		resp, err = proto.Marshal(rr)
 
+	case reqTypeLookupNodes:
+		if len(msg) < 3 {
+			err = fmt.Errorf("lookup nodes: size too small")
+			break
+		}
+
+		rr := &ReqResp{}
+		n := int(binary.BigEndian.Uint16(msg[:2]))
+		rr.Nodes, err = trans.local.LookupNodes(msg[2:], n)
+		if err == nil {
+			resp, err = proto.Marshal(rr)
+		}
+
 	case reqTypeLookupGroupNodes:
 		rr := &ReqResp{}
 		if rr.Nodes, err = trans.local.LookupGroupNodes(msg); err != nil {
@@ -182,7 +225,7 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 
 	case reqTypeInsert:
 		if len(msg) < 20 {
-			err = fmt.Errorf("insert size too small")
+			err = fmt.Errorf("insert: size too small")
 			break
 		}
 		prop := msg[0]
@@ -197,7 +240,7 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 
 	case reqTypeDelete:
 		if len(msg) < 20 {
-			err = fmt.Errorf("delete size too small: %d", len(msg))
+			err = fmt.Errorf("delete: size too small %d", len(msg))
 			break
 		}
 

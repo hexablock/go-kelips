@@ -24,6 +24,14 @@ func Test_Client(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	lns, err := client.LookupNodes(testkey1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lns) < 2 {
+		t.Fatal("didn't get enough nodes")
+	}
+
 	n1, err := client.Lookup(testkey)
 	if err != nil {
 		t.Error(err)

@@ -58,6 +58,8 @@ func (conf *Config) metaBytes() []byte {
 // AffinityGroupRPC implements an interface for local rpc's used by the
 // transport
 type AffinityGroupRPC interface {
+	LookupNodes(key []byte, min int) ([]*hexatype.Node, error)
+
 	LookupGroupNodes(key []byte) ([]*hexatype.Node, error)
 
 	// Lookup nodes from the local view
@@ -228,6 +230,11 @@ func (kelips *Kelips) Delete(key []byte, tuple TupleHost) (err error) {
 	return err
 }
 
+// LookupNodes returns a minimum of n nodes that a key maps to
+func (kelips *Kelips) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+	return kelips.local.LookupNodes(key, min)
+}
+
 // LookupGroupNodes returns all nodes in a group for the key
 func (kelips *Kelips) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
 	return kelips.local.LookupGroupNodes(key)
@@ -259,6 +266,11 @@ func (kelips *Kelips) Lookup(key []byte) ([]*hexatype.Node, error) {
 		hosts, er := kelips.trans.Lookup(n.Host(), key)
 		if er == nil {
 			return hosts, nil
+			// lnodes := make([]hexatype.Node, len(hosts))
+			// for i := range hosts {
+			// 	lnodes[i] = *hosts[i]
+			// }
+			// return lnodes, nil
 		}
 		err = er
 	}

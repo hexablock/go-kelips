@@ -105,6 +105,15 @@ func Test_Kelips(t *testing.T) {
 	if int(ss.Groups) != k1.conf.NumGroups {
 		t.Error("group mismatch")
 	}
+
+	nodes, err := k2.LookupNodes([]byte("foo"), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) < 3 {
+		t.Fatal("don't have enough nodes", len(nodes))
+	}
+
 	// b, _ := proto.Marshal(ss)
 	// t.Log("Snapshot size", len(b))
 	//

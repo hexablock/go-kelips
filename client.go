@@ -39,6 +39,12 @@ func (client *Client) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
 	return client.trans.LookupGroupNodes(host, key)
 }
 
+// LookupNodes request nodes for key returning atleast min number of nodes
+func (client *Client) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+	host := client.getpeer()
+	return client.trans.LookupNodes(host, key, min)
+}
+
 // Lookup returns nodes holding the key
 func (client *Client) Lookup(key []byte) ([]*hexatype.Node, error) {
 	host := client.getpeer()

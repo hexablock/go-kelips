@@ -128,6 +128,33 @@ func (lrpc *localGroup) propogate(hashFunc func() hash.Hash) {
 	}
 }
 
+func (lrpc *localGroup) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+	h := lrpc.hashFunc()
+	h.Write(key)
+	sh := h.Sum(nil)
+
+	group := lrpc.groups.get(sh)
+	nodes := group.Nodes()
+
+GET_MORE:
+	if len(nodes) >= min {
+		out := make([]*hexatype.Node, len(nodes))
+		for i := range nodes {
+			out[i] = &nodes[i]
+		}
+		return out, nil
+	}
+
+	group = lrpc.groups.nextClosestGroup(group)
+	if group == nil {
+		return nil, fmt.Errorf("nodes not found: %x", key)
+	}
+
+	nodes = append(nodes, group.Nodes()...)
+	goto GET_MORE
+
+}
+
 func (lrpc *localGroup) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
 	h := lrpc.hashFunc()
 	h.Write(key)
@@ -135,12 +162,10 @@ func (lrpc *localGroup) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
 
 	group := lrpc.groups.get(sh)
 	n := group.Nodes()
-
 	nodes := make([]*hexatype.Node, len(n))
 	for i := range n {
 		nodes[i] = &n[i]
 	}
-
 	return nodes, nil
 }
 
@@ -157,7 +182,6 @@ func (lrpc *localGroup) Lookup(key []byte) ([]*hexatype.Node, error) {
 		id := tuple.ID(h)
 		group := lrpc.groups.get(id)
 		if node, ok := group.getNode(tuple.String()); ok {
-			//log.Println(node)
 			nodes = append(nodes, node)
 		}
 	}

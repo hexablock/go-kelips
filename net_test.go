@@ -50,6 +50,25 @@ func (group *MockAffinityGroupRPC) LookupGroupNodes(key []byte) ([]*hexatype.Nod
 	return nil, fmt.Errorf("key not found: %s", key)
 }
 
+func (group *MockAffinityGroupRPC) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+	group.mu.Lock()
+	defer group.mu.Unlock()
+
+	if hosts, ok := group.hosts[string(key)]; ok {
+		out := make([]*hexatype.Node, 0, len(hosts))
+		for _, host := range hosts {
+			//out = append(out, NewNodeFromTuple(host))
+			out = append(out, &hexatype.Node{Address: host})
+		}
+		if len(out) < min {
+			return nil, fmt.Errorf("nodes not found: %s", key)
+		}
+
+		return out, nil
+	}
+	return nil, fmt.Errorf("key not found: %s", key)
+}
+
 // Insert to local group
 func (group *MockAffinityGroupRPC) Insert(key []byte, host TupleHost, prop bool) error {
 	group.mu.Lock()
@@ -115,6 +134,8 @@ func Test_UDPTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	t3.Insert("127.0.0.1:23456", []byte("key"), NewTupleHostFromHostPort("127.0.0.1", 23457), false)
+
 	if hosts, err := t1.Lookup("127.0.0.1:23457", []byte("key")); err != nil || hosts == nil || len(hosts) == 0 {
 		t.Fatal("should have hosts", err)
 	}
@@ -128,6 +149,16 @@ func Test_UDPTransport(t *testing.T) {
 	if hosts[0].Port() != 23456 {
 		t.Fatal("wrong host", hosts[0].Host())
 	}
+
+	ns, err := t1.LookupNodes("127.0.0.1:23456", []byte("key"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ns) != 2 {
+		t.Fatal("should have 2", len(ns))
+	}
+
+	// DELETE
 
 	if err = t2.Delete("127.0.0.1:23457", []byte("key"), NewTupleHostFromHostPort("127.0.0.1", 23456), false); err != nil {
 		t.Fatal(err)

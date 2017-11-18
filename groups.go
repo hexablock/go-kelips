@@ -60,33 +60,28 @@ func (ct affinityGroups) iterNodes(f func(hexatype.Node) bool) {
 }
 
 // nextClosestGroup gets the next closest group containing nodes working its way
-// up groups and wrapping back around the bottom
+// down and wrapping back to the top once it hits the end.
 func (ct affinityGroups) nextClosestGroup(g *affinityGroup) *affinityGroup {
 	group := g
-	// Handle foreign group
-	nodes := group.Nodes()
+	var nodes []hexatype.Node
 
-RETRY:
-	if len(nodes) == 0 {
-		//
-		// TODO: Insert into the next closest group
-		//
-		if group.index == 0 {
-			group = ct[len(ct)-1]
-			nodes = group.Nodes()
-		} else {
-			group = ct[group.index-1]
-			nodes = group.Nodes()
-		}
+NEXT_GROUP:
+	if group.index == (len(ct) - 1) {
+		group = ct[0]
+	} else {
+		group = ct[group.index+1]
+	}
 
-		if group.index != g.index {
-			goto RETRY
-		}
+	nodes = group.Nodes()
+	if len(nodes) > 0 {
+		return group
+	}
 
+	if group.index == g.index {
 		return nil
 	}
 
-	return group
+	goto NEXT_GROUP
 }
 
 func genAffinityGroups(numGroups int64, hashSize int64) affinityGroups {
