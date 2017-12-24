@@ -20,6 +20,10 @@ type Config struct {
 	// Number of affinity groups i.e. k value
 	NumGroups int
 
+	// Setting this to true will cause writes to be propogated to all nodes in
+	// in that group
+	EnablePropogation bool
+
 	// Hash function to use
 	HashFunc func() hash.Hash
 
@@ -117,7 +121,10 @@ func Create(conf *Config, remote Transport) *Kelips {
 
 	k.init()
 
+	//if conf.EnablePropogation {
+	log.Println("[INFO] Kelips write propogation enabled!")
 	go k.local.propogate(conf.HashFunc)
+	//}
 
 	return k
 }
@@ -254,10 +261,10 @@ func (kelips *Kelips) Lookup(key []byte) ([]*hexatype.Node, error) {
 	}
 
 	// Handle foreign group
-	group = kelips.groups.nextClosestGroup(group)
-	if group == nil {
-		return nil, fmt.Errorf("nodes not found: %x", key)
-	}
+	// group = kelips.groups.nextClosestGroup(group)
+	// if group == nil {
+	// 	return nil, fmt.Errorf("nodes not found: %x", key)
+	// }
 	nodes := group.Nodes()
 
 	var err error

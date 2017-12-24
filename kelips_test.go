@@ -17,6 +17,7 @@ func TestMain(m *testing.M) {
 func fastTestConf(addr string) *Config {
 	c1 := DefaultConfig(addr)
 	c1.Meta["host"] = addr
+	c1.EnablePropogation = true
 	//c1.PingMax = 300 * time.Millisecond
 	//c1.PingMin = 100 * time.Millisecond
 	return c1
