@@ -127,7 +127,7 @@ func (ft *InmemTuples) Delete(key []byte) error {
 		return nil
 	}
 	ft.mu.Unlock()
-	return fmt.Errorf("key not found: %s", key)
+	return fmt.Errorf("key not found")
 }
 
 // Get returns a list of hosts for a key.  It returns nil if the name is not
@@ -141,7 +141,7 @@ func (ft *InmemTuples) Get(key []byte) ([]TupleHost, error) {
 	if hosts, ok := ft.m[name]; ok {
 		return hosts, nil
 	}
-	return nil, fmt.Errorf("key not found: %s", key)
+	return nil, fmt.Errorf("no tuples for key")
 }
 
 // DeleteKeyHost deletes a host associated to the name returning true if it was deleted
