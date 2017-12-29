@@ -24,7 +24,7 @@ const (
 	respTypeFail
 )
 
-const maxBufSize = 1256
+const maxUDPBufSize = 65000 // Max UDP buffer size
 
 // UDPTransport is a udp based transport for kelips.  It is well suited due to
 // the small message size and reliance on gossip.  It only implements rpc's
@@ -261,7 +261,13 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 		resp = append([]byte{respTypeFail}, []byte(err.Error())...)
 	} else {
 		if resp != nil {
+			// TODO: handle larger payloads
+			if len(resp) >= maxUDPBufSize {
+				log.Printf("[ERROR] Response too big size=%d max=%d", len(resp), maxUDPBufSize)
+			}
+
 			resp = append([]byte{respTypeOk}, resp...)
+
 		} else {
 			resp = []byte{respTypeOk}
 		}
@@ -280,7 +286,7 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 }
 
 func (trans *UDPTransport) listen() {
-	buf := make([]byte, maxBufSize)
+	buf := make([]byte, maxUDPBufSize)
 
 	for {
 		n, remote, err := trans.conn.ReadFromUDP(buf)
@@ -306,9 +312,11 @@ func (trans *UDPTransport) getConn(host string) (*net.UDPConn, error) {
 }
 
 func (trans *UDPTransport) readResponse(conn *net.UDPConn) ([]byte, error) {
-	buf := make([]byte, maxBufSize)
+
+	buf := make([]byte, maxUDPBufSize)
 	n, err := conn.Read(buf)
 	if err == nil {
+		log.Println("bytes read", n)
 		b := buf[:n]
 
 		if b[0] == respTypeOk {
