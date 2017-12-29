@@ -27,6 +27,9 @@ type Config struct {
 	// Hash function to use
 	HashFunc func() hash.Hash
 
+	// Tuple store. Defaults in an in-mem one if not specified
+	TupleStore TupleStore
+
 	Region string
 	Sector string
 	Zone   string
@@ -59,11 +62,40 @@ func (conf *Config) metaBytes() []byte {
 	return []byte(out[:len(out)-1])
 }
 
+// TupleStore is used to store and interact with tuples
+type TupleStore interface {
+	// Iter iterates over all the tuples.  If the callback returns false, iteration
+	// is terminated
+	Iter(f func(key []byte, hosts []TupleHost) bool)
+
+	// Count returns the total number of keys in the store
+	Count() int
+
+	// Insert adds a new host for a name if it does not already exist.  It returns true
+	// if the host was added
+	Insert(key []byte, h TupleHost) error
+
+	// Delete deletes a key removing all associated TupleHosts
+	Delete(key []byte) error
+
+	// Get returns a list of hosts for a key.  It returns nil if the name is not
+	// found
+	Get(key []byte) ([]TupleHost, error)
+
+	// DeleteKeyHost deletes a host associated to the name returning true if it was deleted
+	DeleteKeyHost(key []byte, h TupleHost) bool
+
+	// ExpireHost removes a host from all keys referring to it
+	ExpireHost(tuple TupleHost) bool
+}
+
 // AffinityGroupRPC implements an interface for local rpc's used by the
 // transport
 type AffinityGroupRPC interface {
+	// Lookup nodes returning the min amount
 	LookupNodes(key []byte, min int) ([]*hexatype.Node, error)
 
+	// Retuan all nodes for key group
 	LookupGroupNodes(key []byte) ([]*hexatype.Node, error)
 
 	// Lookup nodes from the local view
@@ -105,18 +137,22 @@ type Kelips struct {
 	local *localGroup
 
 	// Key tuples
-	tuples *InmemTuples
+	tuples TupleStore
 
 	// Network transport
 	trans Transport
 }
 
-// Create instantiates kelips and registers the local group to the transport
+// Create instantiates kelips and registers the local group to the transport. It
+// inits an in-memory tuple store
 func Create(conf *Config, remote Transport) *Kelips {
 	k := &Kelips{
 		conf:   conf,
-		tuples: NewInmemTuples(),
+		tuples: conf.TupleStore,
 		trans:  remote,
+	}
+	if k.tuples == nil {
+		k.tuples = NewInmemTuples()
 	}
 
 	k.init()

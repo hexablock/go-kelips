@@ -316,7 +316,6 @@ func (trans *UDPTransport) readResponse(conn *net.UDPConn) ([]byte, error) {
 	buf := make([]byte, maxUDPBufSize)
 	n, err := conn.Read(buf)
 	if err == nil {
-		log.Println("bytes read", n)
 		b := buf[:n]
 
 		if b[0] == respTypeOk {

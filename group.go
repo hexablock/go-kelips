@@ -32,7 +32,7 @@ type localGroup struct {
 	hashFunc func() hash.Hash
 
 	// Group tuples
-	tuples *InmemTuples
+	tuples TupleStore
 
 	// All groups
 	groups affinityGroups
@@ -46,7 +46,6 @@ type localGroup struct {
 
 func (lrpc *localGroup) Delete(key []byte, tuple TupleHost, propogate bool) error {
 	ok := lrpc.tuples.DeleteKeyHost(key, tuple)
-	//err := lrpc.tuples.Delete(key)
 	if ok && propogate {
 		prop := &propReq{
 			typ:   0,
