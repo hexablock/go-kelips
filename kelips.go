@@ -260,25 +260,20 @@ func (kelips *Kelips) Lookup(key []byte) ([]*hexatype.Node, error) {
 		return kelips.local.Lookup(key)
 	}
 
-	// Handle foreign group
-	// group = kelips.groups.nextClosestGroup(group)
-	// if group == nil {
-	// 	return nil, fmt.Errorf("nodes not found: %x", key)
-	// }
-	nodes := group.Nodes()
+	// Get the first successful list from any node in the other group
+	var (
+		nodes = group.Nodes()
+		err   error
+	)
 
-	var err error
 	for _, n := range nodes {
-		// First successful one
+
 		hosts, er := kelips.trans.Lookup(n.Host(), key)
 		if er == nil {
+			// Found
 			return hosts, nil
-			// lnodes := make([]hexatype.Node, len(hosts))
-			// for i := range hosts {
-			// 	lnodes[i] = *hosts[i]
-			// }
-			// return lnodes, nil
 		}
+
 		err = er
 	}
 
