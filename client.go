@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/hexablock/hexatype"
+	"github.com/hexablock/go-kelips/kelipspb"
 )
 
 // Client implements a kelips client
@@ -34,19 +34,19 @@ func (c *Client) getpeer() string {
 }
 
 // LookupGroupNodes requests group nodes for a key from a peer
-func (c *Client) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
+func (c *Client) LookupGroupNodes(key []byte) ([]*kelipspb.Node, error) {
 	host := c.getpeer()
 	return c.trans.LookupGroupNodes(host, key)
 }
 
 // LookupNodes request nodes for key returning atleast min number of nodes
-func (c *Client) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+func (c *Client) LookupNodes(key []byte, min int) ([]*kelipspb.Node, error) {
 	host := c.getpeer()
 	return c.trans.LookupNodes(host, key, min)
 }
 
 // Lookup returns nodes holding the key
-func (c *Client) Lookup(key []byte) ([]*hexatype.Node, error) {
+func (c *Client) Lookup(key []byte) ([]*kelipspb.Node, error) {
 	host := c.getpeer()
 	return c.trans.Lookup(host, key)
 }

@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package kelipspb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/hexablock/vivaldi/structs.proto";
+
+option go_package = "github.com/hexablock/go-kelips/kelipspb";
+
+message Tuple {
+    bytes Key = 1;
+    repeated bytes Hosts = 2;
+}
+
+message Node {
+    // Auto-generated. Will be unique across cluster
+    bytes ID = 1;
+
+    // Advertised cluster address
+    bytes Address = 2 [(gogoproto.casttype) = "Address"];
+
+    // In nanseconds
+    int64 LastSeen = 3;
+
+    // Number of times 'contacted' e.g. update on each ping
+    uint32 Heartbeats = 4;
+
+    // Latency from the perspective of the 'cluster' node returning this
+    // object in nanseconds
+    int64 Latency = 5 [(gogoproto.stdduration) = true];
+
+    // Additional custom metadata
+    map<string, string> Meta = 6;
+
+    // Virtual coordinate space
+    vivaldi.Coordinate Coordinates = 7;
+}
+
+message ReqResp {
+    bytes Key = 1;
+    repeated Node Nodes = 2;
+}
+
+message Snapshot {
+    int32 Groups = 1;
+    repeated Tuple Tuples = 2;
+    repeated Node Nodes = 3;
+}

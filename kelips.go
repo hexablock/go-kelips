@@ -7,7 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/hexablock/hexatype"
+	"github.com/hexablock/go-kelips/kelipspb"
+	"github.com/hexablock/iputil"
 	"github.com/hexablock/vivaldi"
 )
 
@@ -45,22 +46,11 @@ func DefaultConfig(host string) *Config {
 		AdvertiseHost: host,
 		NumGroups:     2,
 		HashFunc:      sha256.New,
-		Region:        "region1",
+		Region:        "global",
 		Sector:        "sector1",
 		Zone:          "zone1",
 		Meta:          make(map[string]string),
 	}
-}
-
-func (conf *Config) metaBytes() []byte {
-	if len(conf.Meta) == 0 {
-		return nil
-	}
-	var out string
-	for k, v := range conf.Meta {
-		out += fmt.Sprintf("%s=%s,", k, v)
-	}
-	return []byte(out[:len(out)-1])
 }
 
 // TupleStore is used to store and interact with tuples
@@ -94,13 +84,13 @@ type TupleStore interface {
 // transport
 type AffinityGroupRPC interface {
 	// Lookup nodes returning the min amount
-	LookupNodes(key []byte, min int) ([]*hexatype.Node, error)
+	LookupNodes(key []byte, min int) ([]*kelipspb.Node, error)
 
 	// Retuan all nodes for key group
-	LookupGroupNodes(key []byte) ([]*hexatype.Node, error)
+	LookupGroupNodes(key []byte) ([]*kelipspb.Node, error)
 
 	// Lookup nodes from the local view
-	Lookup(key []byte) ([]*hexatype.Node, error)
+	Lookup(key []byte) ([]*kelipspb.Node, error)
 
 	// Insert to local group
 	Insert(key []byte, tuple TupleHost, propogate bool) error
@@ -111,8 +101,8 @@ type AffinityGroupRPC interface {
 
 // Transport implements RPC's needed by kelips
 type Transport interface {
-	LookupGroupNodes(host string, key []byte) ([]*hexatype.Node, error)
-	Lookup(host string, key []byte) ([]*hexatype.Node, error)
+	LookupGroupNodes(host string, key []byte) ([]*kelipspb.Node, error)
+	Lookup(host string, key []byte) ([]*kelipspb.Node, error)
 	Insert(host string, key []byte, tuple TupleHost, propogate bool) error
 	Delete(host string, key []byte, tuple TupleHost, propogate bool) error
 	Register(AffinityGroupRPC)
@@ -121,7 +111,7 @@ type Transport interface {
 // AffinityGroup is an interface used for group lookups.  This is used to get
 // nodes in a group
 type AffinityGroup interface {
-	Nodes() []hexatype.Node
+	Nodes() []kelipspb.Node
 }
 
 // Kelips is the core engine of the dht.  It provides functions to operate
@@ -171,12 +161,13 @@ func (kelips *Kelips) init() {
 	kelips.groups = genAffinityGroups(int64(c.NumGroups), int64(c.HashFunc().Size()))
 
 	tuple := NewTupleHost(kelips.conf.AdvertiseHost)
-	localNode := &hexatype.Node{
-		Address: tuple,
-		Region:  kelips.conf.Region,
-		Sector:  kelips.conf.Sector,
-		Zone:    kelips.conf.Zone,
-		Meta:    kelips.conf.metaBytes(),
+	localNode := &kelipspb.Node{
+		Address: kelipspb.Address(tuple),
+		Meta: map[string]string{
+			"region": c.Region,
+			"sector": c.Sector,
+			"zone":   c.Zone,
+		},
 	}
 	localNode.ID = localNode.HashID(c.HashFunc())
 
@@ -199,8 +190,25 @@ func (kelips *Kelips) init() {
 	log.Printf("[INFO] Kelips group=%d/%d id=%x", local.index, c.NumGroups, local.id)
 }
 
+// Join adds the given peers to their respective groups
+func (kelips *Kelips) Join(peers []string) error {
+	var err error
+	for i := range peers {
+		addr, port, er := iputil.SplitHostPort(peers[i])
+		if er != nil {
+			err = er
+			continue
+		}
+		node := kelipspb.NewNode(addr, port)
+		if er = kelips.AddNode(node, false); er != nil {
+			err = er
+		}
+	}
+	return err
+}
+
 // LocalNode returns the local node by performing a lookup
-func (kelips *Kelips) LocalNode() hexatype.Node {
+func (kelips *Kelips) LocalNode() kelipspb.Node {
 	group := kelips.groups[kelips.local.idx]
 	n, _ := group.getNode(kelips.conf.AdvertiseHost)
 	return *n
@@ -220,11 +228,13 @@ func (kelips *Kelips) Insert(key []byte, tuple TupleHost) error {
 
 	// Get key group
 	group := kelips.groups.get(keysh)
+
+	// Local group
 	if group.index == kelips.local.idx {
 		return kelips.local.Insert(key, tuple, true)
 	}
 
-	// Handle foreign group
+	// Foreign group
 	group = kelips.groups.nextClosestGroup(group)
 	if group == nil {
 		return fmt.Errorf("no nodes found for key: %x", key)
@@ -234,7 +244,7 @@ func (kelips *Kelips) Insert(key []byte, tuple TupleHost) error {
 	var err error
 	for _, n := range nodes {
 		// Return on first successful one
-		if er := kelips.trans.Insert(n.Host(), key, tuple, true); er != nil {
+		if er := kelips.trans.Insert(n.Address.String(), key, tuple, true); er != nil {
 			err = er
 			continue
 		}
@@ -264,7 +274,7 @@ func (kelips *Kelips) Delete(key []byte, tuple TupleHost) (err error) {
 	nodes := group.Nodes()
 	for _, n := range nodes {
 		// First successful one
-		if er := kelips.trans.Delete(n.Host(), key, tuple, true); er != nil {
+		if er := kelips.trans.Delete(n.Address.String(), key, tuple, true); er != nil {
 			err = er
 			continue
 		}
@@ -275,37 +285,43 @@ func (kelips *Kelips) Delete(key []byte, tuple TupleHost) (err error) {
 }
 
 // LookupNodes returns a minimum of n nodes that a key maps to
-func (kelips *Kelips) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+func (kelips *Kelips) LookupNodes(key []byte, min int) ([]*kelipspb.Node, error) {
 	return kelips.local.LookupNodes(key, min)
 }
 
 // LookupGroupNodes returns all nodes in a group for the key
-func (kelips *Kelips) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
+func (kelips *Kelips) LookupGroupNodes(key []byte) ([]*kelipspb.Node, error) {
 	return kelips.local.LookupGroupNodes(key)
 }
 
 // Lookup hashes the key and finds its affinity group.  If the group is local
 // it returns all local known nodes for the key otherwise it makes a Lookup call
 // on the owning foreign group and returns its nodes
-func (kelips *Kelips) Lookup(key []byte) ([]*hexatype.Node, error) {
+func (kelips *Kelips) Lookup(key []byte) ([]*kelipspb.Node, error) {
 	h := kelips.conf.HashFunc()
 	h.Write(key)
 	sh := h.Sum(nil)
 
 	group := kelips.groups.get(sh)
+	nodes := group.Nodes()
+	if len(nodes) == 0 {
+		group = kelips.groups.nextClosestGroup(group)
+		if group == nil {
+			return nil, fmt.Errorf("no nodes found for key: %x", key)
+		}
+	}
+
 	if group.index == kelips.local.idx {
 		return kelips.local.Lookup(key)
 	}
 
 	// Get the first successful list from any node in the other group
-	var (
-		nodes = group.Nodes()
-		err   error
-	)
+	var err error
 
+	nodes = group.Nodes()
 	for _, n := range nodes {
 
-		hosts, er := kelips.trans.Lookup(n.Host(), key)
+		hosts, er := kelips.trans.Lookup(n.Address.String(), key)
 		if er == nil {
 			// Found
 			return hosts, nil
@@ -325,7 +341,7 @@ func (kelips *Kelips) PingNode(hostname string, coord *vivaldi.Coordinate, rtt t
 
 // AddNode adds a node to the DHT.  It calculates the node id and adds it to the
 // group it belongs to
-func (kelips *Kelips) AddNode(node *hexatype.Node, force bool) error {
+func (kelips *Kelips) AddNode(node *kelipspb.Node, force bool) error {
 	node.ID = node.HashID(kelips.conf.HashFunc())
 	group := kelips.groups.get(node.ID)
 	return group.addNode(node, force)
@@ -350,7 +366,7 @@ func (kelips *Kelips) getHostGroup(host string) *affinityGroup {
 }
 
 // Snapshot returns a Snapshot of all tuples and nodes known to the node.
-func (kelips *Kelips) Snapshot() *Snapshot {
+func (kelips *Kelips) Snapshot() *kelipspb.Snapshot {
 	ss := kelips.local.Snapshot()
 	ss.Groups = int32(kelips.conf.NumGroups)
 
@@ -358,7 +374,7 @@ func (kelips *Kelips) Snapshot() *Snapshot {
 }
 
 // Seed seeds the local groups with the given snapshot
-func (kelips *Kelips) Seed(snapshot *Snapshot) error {
+func (kelips *Kelips) Seed(snapshot *kelipspb.Snapshot) error {
 	var err error
 
 	for _, node := range snapshot.Nodes {

@@ -2,12 +2,17 @@ package kelips
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash"
 	"log"
 	"net"
 	"strconv"
 	"sync"
+)
+
+var (
+	errKeyNotFound = errors.New("key not found")
 )
 
 // TupleHost is the host port of a key tuple
@@ -55,6 +60,13 @@ func (host TupleHost) String() string {
 	return host.IPAddress().String() + fmt.Sprintf(":%d", host.Port())
 }
 
+// Copy returns a copy of the tuple host
+func (host TupleHost) Copy() TupleHost {
+	out := make(TupleHost, len(host))
+	copy(out, host)
+	return out
+}
+
 // InmemTuples implements an in-memory  TupleStore
 type InmemTuples struct {
 	mu sync.RWMutex
@@ -98,7 +110,7 @@ func (ft *InmemTuples) Insert(key []byte, h TupleHost) error {
 	hosts, ok := ft.m[name]
 	if !ok {
 		ft.m[name] = []TupleHost{h}
-		log.Printf("[DEBUG] Tuple added key=%x host=%s", name, h)
+		log.Printf("[DEBUG] Tuple added key=%q host=%s", name, h)
 		return nil
 	}
 
@@ -111,7 +123,6 @@ func (ft *InmemTuples) Insert(key []byte, h TupleHost) error {
 
 	ft.m[name] = append(hosts, h)
 	log.Printf("[DEBUG] Tuple added key=%x host=%s", name, h)
-
 	return nil
 }
 
@@ -126,7 +137,7 @@ func (ft *InmemTuples) Delete(key []byte) error {
 		return nil
 	}
 	ft.mu.Unlock()
-	return fmt.Errorf("key not found")
+	return errKeyNotFound
 }
 
 // Get returns a list of hosts for a key.  It returns nil if the name is not
@@ -140,7 +151,8 @@ func (ft *InmemTuples) Get(key []byte) ([]TupleHost, error) {
 	if hosts, ok := ft.m[name]; ok {
 		return hosts, nil
 	}
-	return nil, fmt.Errorf("no tuples for key")
+
+	return nil, errKeyNotFound
 }
 
 // DeleteKeyHost deletes a host associated to the name returning true if it was deleted
@@ -150,26 +162,19 @@ func (ft *InmemTuples) DeleteKeyHost(key []byte, h TupleHost) bool {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 
-	//ft.mu.RLock()
 	hosts, ok := ft.m[name]
 	if !ok {
-		//ft.mu.RUnlock()
 		return false
 	}
 
 	for i, v := range hosts {
 		if h.String() == v.String() {
-			//ft.mu.RUnlock()
-
-			//ft.mu.Lock()
 			ft.m[name] = append(hosts[:i], hosts[i+1:]...)
-			//ft.mu.Unlock()
 
-			log.Printf("[DEBUG] Tuple deleted key=%x host=%s", name, h)
+			log.Printf("[DEBUG] Tuple deleted key=%q host=%s", key, h)
 			return true
 		}
 	}
-	//ft.mu.RUnlock()
 
 	return false
 }
@@ -184,7 +189,7 @@ func (ft *InmemTuples) ExpireHost(tuple TupleHost) bool {
 		for i, h := range hosts {
 			if h.String() == th {
 				ft.m[k] = append(hosts[:i], hosts[i+1:]...)
-				log.Printf("[DEBUG] Tuple expired key=%x host=%s", k, th)
+				log.Printf("[DEBUG] Tuple expired key=%q host=%s", k, th)
 				ok = true
 				break
 			}

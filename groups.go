@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"math/big"
 
-	"github.com/hexablock/hexatype"
+	"github.com/hexablock/go-kelips/kelipspb"
 )
 
 type affinityGroups []*affinityGroup
@@ -45,7 +45,7 @@ func (ct affinityGroups) nodeCount() int {
 }
 
 // iterNodes iterates over all nodes in all groups
-func (ct affinityGroups) iterNodes(f func(hexatype.Node) bool) {
+func (ct affinityGroups) iterNodes(f func(kelipspb.Node) bool) {
 	for _, group := range ct {
 
 		nodes := group.Nodes()
@@ -63,7 +63,7 @@ func (ct affinityGroups) iterNodes(f func(hexatype.Node) bool) {
 // down and wrapping back to the top once it hits the end.
 func (ct affinityGroups) nextClosestGroup(g *affinityGroup) *affinityGroup {
 	group := g
-	var nodes []hexatype.Node
+	var nodes []kelipspb.Node
 
 NEXT_GROUP:
 	if group.index == (len(ct) - 1) {

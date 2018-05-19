@@ -29,20 +29,14 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func Test_Config(t *testing.T) {
-	c := DefaultConfig("ffoo")
-	c.EnablePropogation = true
-	b := c.metaBytes()
-	if b != nil {
-		t.Error("should be nil")
-	}
-}
-
 func Test_Kelips(t *testing.T) {
 
 	k1 := kelipsTestInstance(54540)
+	k1.Join([]string{"127.0.0.1:54541", "127.0.0.1:54542"})
 	k2 := kelipsTestInstance(54541)
+	k1.Join([]string{"127.0.0.1:54540", "127.0.0.1:54542"})
 	k3 := kelipsTestInstance(54542)
+	k1.Join([]string{"127.0.0.1:54541", "127.0.0.1:54540"})
 
 	testkey := []byte("key")
 	testkey1 := []byte("test-key-test")
@@ -94,8 +88,8 @@ func Test_Kelips(t *testing.T) {
 	t.Log(k1.groups[1])
 
 	kn1 := k1.LocalNode()
-	if kn1.Host() != "127.0.0.1:54540" {
-		t.Fatal("wrong host", kn1.Host())
+	if kn1.Address.String() != "127.0.0.1:54540" {
+		t.Fatal("wrong host", kn1.Address.String())
 	}
 
 	ss := k1.Snapshot()

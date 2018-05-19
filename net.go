@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"github.com/hexablock/hexatype"
+	"github.com/hexablock/go-kelips/kelipspb"
 )
 
 const (
@@ -44,7 +44,7 @@ func NewUDPTransport(ln *net.UDPConn) *UDPTransport {
 }
 
 // LookupNodes performs a lookup request on a host returning at least min nodes
-func (trans *UDPTransport) LookupNodes(host string, key []byte, min int) ([]*hexatype.Node, error) {
+func (trans *UDPTransport) LookupNodes(host string, key []byte, min int) ([]*kelipspb.Node, error) {
 	conn, err := trans.getConn(host)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (trans *UDPTransport) LookupNodes(host string, key []byte, min int) ([]*hex
 		return nil, err
 	}
 
-	var rr ReqResp
+	var rr kelipspb.ReqResp
 	if err = proto.Unmarshal(buf, &rr); err == nil {
 		return rr.Nodes, nil
 	}
@@ -72,7 +72,7 @@ func (trans *UDPTransport) LookupNodes(host string, key []byte, min int) ([]*hex
 }
 
 // Lookup performs a lookup request on a host for a key
-func (trans *UDPTransport) Lookup(host string, key []byte) ([]*hexatype.Node, error) {
+func (trans *UDPTransport) Lookup(host string, key []byte) ([]*kelipspb.Node, error) {
 	conn, err := trans.getConn(host)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (trans *UDPTransport) Lookup(host string, key []byte) ([]*hexatype.Node, er
 		return nil, err
 	}
 
-	var rr ReqResp
+	var rr kelipspb.ReqResp
 	if err = proto.Unmarshal(buf, &rr); err == nil {
 		return rr.Nodes, nil
 	}
@@ -96,7 +96,7 @@ func (trans *UDPTransport) Lookup(host string, key []byte) ([]*hexatype.Node, er
 }
 
 // LookupGroupNodes looksup the group nodes for a key on a remote host
-func (trans *UDPTransport) LookupGroupNodes(host string, key []byte) ([]*hexatype.Node, error) {
+func (trans *UDPTransport) LookupGroupNodes(host string, key []byte) ([]*kelipspb.Node, error) {
 	conn, err := trans.getConn(host)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (trans *UDPTransport) LookupGroupNodes(host string, key []byte) ([]*hexatyp
 		return nil, err
 	}
 
-	var rr ReqResp
+	var rr kelipspb.ReqResp
 	if err = proto.Unmarshal(buf, &rr); err == nil {
 		return rr.Nodes, nil
 	}
@@ -185,7 +185,7 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 	switch typ {
 
 	case reqTypeLookup:
-		rr := &ReqResp{}
+		rr := &kelipspb.ReqResp{}
 		if rr.Nodes, err = trans.local.Lookup(msg); err != nil {
 			break
 		}
@@ -203,7 +203,7 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 			break
 		}
 
-		rr := &ReqResp{}
+		rr := &kelipspb.ReqResp{}
 		n := int(binary.BigEndian.Uint16(msg[:2]))
 		rr.Nodes, err = trans.local.LookupNodes(msg[2:], n)
 		if err == nil {
@@ -211,7 +211,7 @@ func (trans *UDPTransport) handleRequest(remote *net.UDPAddr, typ byte, msg []by
 		}
 
 	case reqTypeLookupGroupNodes:
-		rr := &ReqResp{}
+		rr := &kelipspb.ReqResp{}
 		if rr.Nodes, err = trans.local.LookupGroupNodes(msg); err != nil {
 			break
 		}

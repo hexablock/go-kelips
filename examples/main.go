@@ -27,7 +27,18 @@ func parsePeers() []string {
 	if *joinAddrs == "" {
 		return []string{}
 	}
-	return strings.Split(*joinAddrs, ",")
+	rawPeers := strings.Split(*joinAddrs, ",")
+
+	peers := make([]string, 0, len(rawPeers))
+	for i := range rawPeers {
+		p := strings.TrimSpace(rawPeers[i])
+		if len(p) == 0 {
+			continue
+		}
+		peers = append(peers, p)
+	}
+
+	return peers
 }
 
 func initTransport() (*kelips.UDPTransport, error) {
@@ -61,6 +72,13 @@ func main() {
 
 	kelps := kelips.Create(conf, trans)
 	log.Println("Started cluster on", *advAddr)
+
+	if peers := parsePeers(); len(peers) > 0 {
+		err = kelps.Join(peers)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	log.Println("Starting HTTP on", *httpAddr)
 	err = http.ListenAndServe(*httpAddr, &httpServer{klp: kelps})

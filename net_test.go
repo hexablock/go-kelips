@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hexablock/hexatype"
+	"github.com/hexablock/go-kelips/kelipspb"
 	"github.com/hexablock/vivaldi"
 )
 
@@ -21,44 +21,44 @@ func (group *MockAffinityGroupRPC) Ping() *vivaldi.Coordinate {
 }
 
 // Lookup nodes from the local view
-func (group *MockAffinityGroupRPC) Lookup(key []byte) ([]*hexatype.Node, error) {
+func (group *MockAffinityGroupRPC) Lookup(key []byte) ([]*kelipspb.Node, error) {
 	group.mu.Lock()
 	defer group.mu.Unlock()
 	if hosts, ok := group.hosts[string(key)]; ok {
-		out := make([]*hexatype.Node, 0, len(hosts))
+		out := make([]*kelipspb.Node, 0, len(hosts))
 		for _, host := range hosts {
 			//out = append(out, NewNodeFromTuple(host))
-			out = append(out, &hexatype.Node{Address: host})
+			out = append(out, &kelipspb.Node{Address: kelipspb.Address(host)})
 		}
 		return out, nil
 	}
 	return nil, fmt.Errorf("key not found: %s", key)
 }
 
-func (group *MockAffinityGroupRPC) LookupGroupNodes(key []byte) ([]*hexatype.Node, error) {
+func (group *MockAffinityGroupRPC) LookupGroupNodes(key []byte) ([]*kelipspb.Node, error) {
 	group.mu.Lock()
 	defer group.mu.Unlock()
 
 	if hosts, ok := group.hosts[string(key)]; ok {
-		out := make([]*hexatype.Node, 0, len(hosts))
+		out := make([]*kelipspb.Node, 0, len(hosts))
 		for _, host := range hosts {
 			//out = append(out, NewNodeFromTuple(host))
-			out = append(out, &hexatype.Node{Address: host})
+			out = append(out, &kelipspb.Node{Address: kelipspb.Address(host)})
 		}
 		return out, nil
 	}
 	return nil, fmt.Errorf("key not found: %s", key)
 }
 
-func (group *MockAffinityGroupRPC) LookupNodes(key []byte, min int) ([]*hexatype.Node, error) {
+func (group *MockAffinityGroupRPC) LookupNodes(key []byte, min int) ([]*kelipspb.Node, error) {
 	group.mu.Lock()
 	defer group.mu.Unlock()
 
 	if hosts, ok := group.hosts[string(key)]; ok {
-		out := make([]*hexatype.Node, 0, len(hosts))
+		out := make([]*kelipspb.Node, 0, len(hosts))
 		for _, host := range hosts {
 			//out = append(out, NewNodeFromTuple(host))
-			out = append(out, &hexatype.Node{Address: host})
+			out = append(out, &kelipspb.Node{Address: kelipspb.Address(host)})
 		}
 		if len(out) < min {
 			return nil, fmt.Errorf("nodes not found: %s", key)
@@ -146,8 +146,8 @@ func Test_UDPTransport(t *testing.T) {
 	if err != nil || hosts == nil || len(hosts) == 0 {
 		t.Fatal("should have hosts", err)
 	}
-	if hosts[0].Port() != 23456 {
-		t.Fatal("wrong host", hosts[0].Host())
+	if hosts[0].Address.Port() != 23456 {
+		t.Fatal("wrong host", hosts[0].Address.String())
 	}
 
 	ns, err := t1.LookupNodes("127.0.0.1:23456", []byte("key"), 1)

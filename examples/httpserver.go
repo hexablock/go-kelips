@@ -21,7 +21,8 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		err error
+		err  error
+		code int
 	)
 
 	switch r.Method {
@@ -29,12 +30,14 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		nodes, er := hs.klp.Lookup([]byte(reqpath))
 		if er != nil {
 			err = er
+			code = 404
 			break
 		}
 
 		b, er := json.Marshal(nodes)
 		if er != nil {
 			err = er
+			code = 500
 			break
 		}
 		w.Write(b)
@@ -54,9 +57,14 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(`{"error": "` + err.Error() + `"}`))
+	if err == nil {
+		return
 	}
 
+	if code < 400 {
+		code = 400
+	}
+
+	w.WriteHeader(code)
+	w.Write([]byte(`{"error": "` + err.Error() + `"}`))
 }
