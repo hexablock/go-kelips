@@ -31,6 +31,7 @@ func TestMain(m *testing.M) {
 
 func Test_Config(t *testing.T) {
 	c := DefaultConfig("ffoo")
+	c.EnablePropogation = true
 	b := c.metaBytes()
 	if b != nil {
 		t.Error("should be nil")
