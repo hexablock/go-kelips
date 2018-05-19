@@ -9,7 +9,7 @@ deps:
 	go get -d -v .
 
 kelipsd:
-	go build -o kelipsd examples/main.go
+	go build -o kelipsd examples/*.go
 
 test:
 	go test -race -cover .
