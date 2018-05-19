@@ -121,6 +121,7 @@ func (lrpc *localGroup) propogate(hashFunc func() hash.Hash) {
 			lrpc.propogateInsert(prop.key, prop.tuple, nodes)
 		default:
 			// unrecognized
+			log.Printf("[ERROR] Unrecognized propogation request: %d", prop.typ)
 			continue
 		}
 

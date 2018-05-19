@@ -158,10 +158,10 @@ func Create(conf *Config, remote Transport) *Kelips {
 
 	k.init()
 
-	//if conf.EnablePropogation {
-	log.Println("[INFO] Kelips write propogation enabled!")
-	go k.local.propogate(conf.HashFunc)
-	//}
+	if conf.EnablePropogation {
+		log.Println("[INFO] Kelips write propogation enabled!")
+		go k.local.propogate(conf.HashFunc)
+	}
 
 	return k
 }
