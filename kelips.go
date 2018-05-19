@@ -21,7 +21,8 @@ type Config struct {
 	NumGroups int
 
 	// Setting this to true will cause writes to be propogated to all nodes in
-	// in that group
+	// in the group.  The default is false relying on the underlying gossip
+	// transport to provide propogation
 	EnablePropogation bool
 
 	// Hash function to use

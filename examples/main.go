@@ -52,6 +52,8 @@ func main() {
 	log.SetPrefix("| " + *advAddr + " | ")
 
 	conf := kelips.DefaultConfig(*advAddr)
+	// We have no gossip transport so we enable propogation
+	conf.EnablePropogation = true
 	trans, err := initTransport()
 	if err != nil {
 		log.Fatal(err)
