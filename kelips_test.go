@@ -1,17 +1,12 @@
 package kelips
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"testing"
 	"time"
 )
-
-func TestMain(m *testing.M) {
-	//log.SetLevel("DEBUG")
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	os.Exit(m.Run())
-}
 
 func fastTestConf(addr string) *Config {
 	c1 := DefaultConfig(addr)
@@ -21,23 +16,32 @@ func fastTestConf(addr string) *Config {
 	//c1.PingMin = 100 * time.Millisecond
 	return c1
 }
+func kelipsTestInstance(port int) *Kelips {
+	h := fmt.Sprintf("127.0.0.1:%d", port)
+	c1 := fastTestConf(h)
+	t1 := newBareTrans(h)
+	return Create(c1, t1)
+
+}
+
+func TestMain(m *testing.M) {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	os.Exit(m.Run())
+}
+
+func Test_Config(t *testing.T) {
+	c := DefaultConfig("ffoo")
+	b := c.metaBytes()
+	if b != nil {
+		t.Error("should be nil")
+	}
+}
 
 func Test_Kelips(t *testing.T) {
 
-	c1 := fastTestConf("127.0.0.1:54540")
-	t1 := newBareTrans("127.0.0.1:54540")
-	//	cc1, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
-	k1 := Create(c1, t1)
-
-	c2 := fastTestConf("127.0.0.1:54541")
-	t2 := newBareTrans("127.0.0.1:54541")
-	//	cc2, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
-	k2 := Create(c2, t2)
-
-	c3 := fastTestConf("127.0.0.1:54542")
-	t3 := newBareTrans("127.0.0.1:54542")
-	//	cc3, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
-	k3 := Create(c3, t3)
+	k1 := kelipsTestInstance(54540)
+	k2 := kelipsTestInstance(54541)
+	k3 := kelipsTestInstance(54542)
 
 	testkey := []byte("key")
 	testkey1 := []byte("test-key-test")
@@ -113,24 +117,5 @@ func Test_Kelips(t *testing.T) {
 	if len(nodes) < 3 {
 		t.Fatal("don't have enough nodes", len(nodes))
 	}
-
-	// b, _ := proto.Marshal(ss)
-	// t.Log("Snapshot size", len(b))
-	//
-	// if err = k1.RemoveNode("127.0.0.1:54542"); err != nil {
-	// 	t.Fatal(err)
-	// }
-	// if err = k3.RemoveNode("127.0.0.1:54548"); err == nil {
-	// 	t.Fatal("should failed")
-	// }
-
-	// for _, g := range k1.groups {
-	// 	n := g.Nodes()
-	// 	//b, _ := json.MarshalIndent(n, "", "  ")
-	// 	//t.Logf("%s\n", b)
-	// 	b1, _ := msgpack.Marshal(n[0].Coordinates)
-	// 	b2, _ := proto.Marshal(&n[0].Coordinates)
-	// 	t.Logf("msgpack=%d protobuf=%d", len(b1), len(b2))
-	// }
 
 }

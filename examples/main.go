@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -32,64 +30,13 @@ func parsePeers() []string {
 	return strings.Split(*joinAddrs, ",")
 }
 
-type httpServer struct {
-	klp *kelips.Kelips
-}
-
-func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	reqpath := r.URL.Path[1:]
-	if reqpath == "" {
-		w.WriteHeader(404)
-		return
-	}
-
-	var (
-		err error
-	)
-
-	switch r.Method {
-	case "GET":
-		nodes, er := hs.klp.Lookup([]byte(reqpath))
-		if er != nil {
-			err = er
-			break
-		}
-
-		b, er := json.Marshal(nodes)
-		if er != nil {
-			err = er
-			break
-		}
-		w.Write(b)
-
-	case "POST":
-		hpath := strings.Split(reqpath, "/")
-		if len(hpath) != 2 {
-			err = fmt.Errorf("must be in format {host}:{ip}/{key}")
-			break
-		}
-
-		tuple := kelips.NewTupleHost(hpath[0])
-		err = hs.klp.Insert([]byte(hpath[1]), tuple)
-
-	default:
-		w.WriteHeader(405)
-		return
-	}
-
-	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(`{"error": "` + err.Error() + `"}`))
-	}
-
-}
-
 func initTransport() (*kelips.UDPTransport, error) {
 
 	udpAddr, err := net.ResolveUDPAddr("udp", *advAddr)
 	if err != nil {
 		return nil, err
 	}
+
 	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return nil, err
@@ -100,29 +47,22 @@ func initTransport() (*kelips.UDPTransport, error) {
 
 func main() {
 	flag.Parse()
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 	log.SetPrefix("| " + *advAddr + " | ")
 
 	conf := kelips.DefaultConfig(*advAddr)
 	trans, err := initTransport()
-	//	coords, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	kelps := kelips.Create(conf, trans)
 	log.Println("Started cluster on", *advAddr)
 
-	// peers := parsePeers()
-	// if len(peers) > 0 {
-	// 	log.Println("Joining", *joinAddrs)
-	// 	if err = trans.Join(peers...); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// }
-
-	handler := &httpServer{klp: kelps}
 	log.Println("Starting HTTP on", *httpAddr)
-	if err = http.ListenAndServe(*httpAddr, handler); err != nil {
+	err = http.ListenAndServe(*httpAddr, &httpServer{klp: kelps})
+	if err != nil {
 		log.Fatal(err)
 	}
 
