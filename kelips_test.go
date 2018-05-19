@@ -61,7 +61,6 @@ func Test_Kelips(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Allow ping
 	<-time.After(1 * time.Second)
 
 	n1, err := k1.Lookup(testkey)
@@ -101,7 +100,7 @@ func Test_Kelips(t *testing.T) {
 		t.Error("should have tuples", len(ss.Tuples), k1.local.tuples.Count())
 	}
 
-	if int(ss.Groups) != k1.conf.NumGroups {
+	if int(ss.Groups) != k1.conf.K {
 		t.Error("group mismatch")
 	}
 

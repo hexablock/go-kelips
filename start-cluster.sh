@@ -23,11 +23,14 @@ peers=""
 set_peers() {
     peers=""
     self=$1
-    for i in `seq 0 $COUNT`; do
+    count=`expr ${COUNT} \- 1`
+
+    for i in `seq 0 $count`; do
         if [ ${i} -eq ${self} ]; then continue; fi
         port=`expr ${ADV_PORT} \+ $i`
         peers="127.0.0.1:${port},${peers}"
     done
+
 }
 
 [[ ! -e ${BIN} ]] && { echo "$BIN not found!"; exit 1; }
@@ -37,7 +40,6 @@ echo -e "\nStarting ${COUNT} nodes ...\n"
 count=`expr ${COUNT} \- 1`
 for i in `seq 0 $count`; do
     adv_port=`expr ${ADV_PORT} \+ $i`
-    join_port=`expr ${adv_port} \- $i`
     http_port=`expr ${HTTP_PORT} \+ $i`
 
     set_peers $i

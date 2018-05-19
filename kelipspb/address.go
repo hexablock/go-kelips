@@ -4,13 +4,20 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+
+	"github.com/hexablock/iputil"
 )
 
 // Address holds a ip:port format address.  IPv4 and IPv6 are supported
 type Address []byte
 
+func NewAddress(hostport string) Address {
+	addr, port, _ := iputil.SplitHostPort(hostport)
+	return newAddress(addr, port)
+}
+
 // NewAddress returns a new address type given the ip string and port number
-func NewAddress(addr string, port int) Address {
+func newAddress(addr string, port int) Address {
 	ip := net.ParseIP(addr)
 	pb := make([]byte, 2)
 	binary.BigEndian.PutUint16(pb, uint16(port))

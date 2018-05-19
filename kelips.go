@@ -1,9 +1,7 @@
 package kelips
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"hash"
 	"log"
 	"time"
 
@@ -11,47 +9,6 @@ import (
 	"github.com/hexablock/iputil"
 	"github.com/hexablock/vivaldi"
 )
-
-// Config holds the kelips config to initialize the dht
-type Config struct {
-	// AdvertiseHost used to compute the hash.  This may be different from the
-	// transport address
-	AdvertiseHost string
-
-	// Number of affinity groups i.e. k value
-	NumGroups int
-
-	// Setting this to true will cause writes to be propogated to all nodes in
-	// in the group.  The default is false relying on the underlying gossip
-	// transport to provide propogation
-	EnablePropogation bool
-
-	// Hash function to use
-	HashFunc func() hash.Hash
-
-	// Tuple store. Defaults in an in-mem one if not specified
-	TupleStore TupleStore
-
-	Region string
-	Sector string
-	Zone   string
-
-	// Meta is serialized to binary and made part of the node object
-	Meta map[string]string
-}
-
-// DefaultConfig returns a minimum required config
-func DefaultConfig(host string) *Config {
-	return &Config{
-		AdvertiseHost: host,
-		NumGroups:     2,
-		HashFunc:      sha256.New,
-		Region:        "global",
-		Sector:        "sector1",
-		Zone:          "zone1",
-		Meta:          make(map[string]string),
-	}
-}
 
 // TupleStore is used to store and interact with tuples
 type TupleStore interface {
@@ -86,7 +43,7 @@ type AffinityGroupRPC interface {
 	// Lookup nodes returning the min amount
 	LookupNodes(key []byte, min int) ([]*kelipspb.Node, error)
 
-	// Retuan all nodes for key group
+	// Return all nodes for key group
 	LookupGroupNodes(key []byte) ([]*kelipspb.Node, error)
 
 	// Lookup nodes from the local view
@@ -105,6 +62,7 @@ type Transport interface {
 	Lookup(host string, key []byte) ([]*kelipspb.Node, error)
 	Insert(host string, key []byte, tuple TupleHost, propogate bool) error
 	Delete(host string, key []byte, tuple TupleHost, propogate bool) error
+	// Register a local affinity group
 	Register(AffinityGroupRPC)
 }
 
@@ -142,6 +100,7 @@ func Create(conf *Config, remote Transport) *Kelips {
 		tuples: conf.TupleStore,
 		trans:  remote,
 	}
+
 	if k.tuples == nil {
 		k.tuples = NewInmemTuples()
 	}
@@ -158,11 +117,11 @@ func Create(conf *Config, remote Transport) *Kelips {
 
 func (kelips *Kelips) init() {
 	c := kelips.conf
-	kelips.groups = genAffinityGroups(int64(c.NumGroups), int64(c.HashFunc().Size()))
+	// Build affinity groups
+	kelips.groups = genAffinityGroups(int64(c.K), int64(c.HashFunc().Size()))
 
-	tuple := NewTupleHost(kelips.conf.AdvertiseHost)
 	localNode := &kelipspb.Node{
-		Address: kelipspb.Address(tuple),
+		Address: kelipspb.NewAddress(c.AdvertiseHost), //kelipspb.Address(tuple),
 		Meta: map[string]string{
 			"region": c.Region,
 			"sector": c.Sector,
@@ -171,12 +130,13 @@ func (kelips *Kelips) init() {
 	}
 	localNode.ID = localNode.HashID(c.HashFunc())
 
-	local := kelips.groups.get(localNode.ID)
-	local.addNode(localNode, true)
+	group := kelips.groups.get(localNode.ID)
+	group.addNode(localNode, true)
 
+	// Build local group
 	kelips.local = &localGroup{
 		local:    localNode,
-		idx:      local.index,
+		idx:      group.index,
 		tuples:   kelips.tuples,
 		groups:   kelips.groups,
 		hashFunc: c.HashFunc,
@@ -187,7 +147,7 @@ func (kelips *Kelips) init() {
 	kelips.trans.Register(kelips.local)
 
 	log.Printf("[INFO] Kelips node=%x", localNode.ID)
-	log.Printf("[INFO] Kelips group=%d/%d id=%x", local.index, c.NumGroups, local.id)
+	log.Printf("[INFO] Kelips group=%d/%d id=%x", group.index, c.K, group.id)
 }
 
 // Join adds the given peers to their respective groups
@@ -370,7 +330,7 @@ func (kelips *Kelips) getHostGroup(host string) *affinityGroup {
 // Snapshot returns a Snapshot of all tuples and nodes known to the node.
 func (kelips *Kelips) Snapshot() *kelipspb.Snapshot {
 	ss := kelips.local.Snapshot()
-	ss.Groups = int32(kelips.conf.NumGroups)
+	ss.Groups = int32(kelips.conf.K)
 
 	return ss
 }

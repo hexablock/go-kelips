@@ -11,7 +11,7 @@ import (
 
 // NewNode returns a new node with the given ip and port
 func NewNode(addr string, port int) *Node {
-	return &Node{Address: NewAddress(addr, port)}
+	return &Node{Address: newAddress(addr, port)}
 }
 
 // HashID returns the hash the node address
