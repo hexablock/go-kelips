@@ -4,6 +4,13 @@ import (
 	"testing"
 )
 
+func Test_Client_err(t *testing.T) {
+	_, err := NewClient()
+	if err == nil {
+		t.Fatal("should fail")
+	}
+}
+
 func Test_Client(t *testing.T) {
 
 	c1 := fastTestConf("127.0.0.1:54940")
