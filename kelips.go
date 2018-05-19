@@ -352,9 +352,11 @@ func (kelips *Kelips) AddNode(node *kelipspb.Node, force bool) error {
 func (kelips *Kelips) RemoveNode(hostname string) error {
 	group := kelips.getHostGroup(hostname)
 	if group.index == kelips.local.idx {
-		// If local remove all tuple references
+		// If local remove all tuple references before actually removing the
+		// node.
 		kelips.tuples.ExpireHost(NewTupleHost(hostname))
 	}
+
 	// Remove node from group
 	return group.removeNode(hostname)
 }

@@ -77,11 +77,11 @@ NEXT_GROUP:
 		return group
 	}
 
-	if group.index == g.index {
-		return nil
+	if group.index != g.index {
+		goto NEXT_GROUP
 	}
 
-	goto NEXT_GROUP
+	return nil
 }
 
 func genAffinityGroups(numGroups int64, hashSize int64) affinityGroups {
