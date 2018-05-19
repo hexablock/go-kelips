@@ -3,12 +3,12 @@ package kelips
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 
 	"github.com/golang/protobuf/proto"
 
 	"github.com/hexablock/hexatype"
-	"github.com/hexablock/log"
 )
 
 const (

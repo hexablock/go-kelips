@@ -1,15 +1,14 @@
 package kelips
 
 import (
+	"log"
 	"os"
 	"testing"
 	"time"
-
-	"github.com/hexablock/log"
 )
 
 func TestMain(m *testing.M) {
-	log.SetLevel("DEBUG")
+	//log.SetLevel("DEBUG")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	os.Exit(m.Run())
 }

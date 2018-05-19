@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/hexablock/hexatype"
-	"github.com/hexablock/log"
 	"github.com/hexablock/vivaldi"
 )
 

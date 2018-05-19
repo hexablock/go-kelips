@@ -4,10 +4,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"log"
 	"time"
 
 	"github.com/hexablock/hexatype"
-	"github.com/hexablock/log"
 	"github.com/hexablock/vivaldi"
 )
 

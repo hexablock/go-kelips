@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	kelips "github.com/hexablock/kelips"
+	kelips "github.com/hexablock/go-kelips"
 )
 
 var (
@@ -23,14 +23,6 @@ func parseAdvAddr() (string, int64, error) {
 	hp := strings.Split(*advAddr, ":")
 	port, err := strconv.ParseInt(hp[1], 10, 32)
 	return hp[0], port, err
-}
-
-func initConf() *kelips.Config {
-
-	conf := kelips.DefaultConfig(*advAddr)
-	conf.Hostname = *advAddr
-
-	return conf
 }
 
 func parsePeers() []string {
@@ -50,11 +42,6 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 		return
 	}
-
-	// if strings.HasPrefix(reqpath, "group/") {
-	// 	hs.handleGroup(w, strings.TrimPrefix(reqpath, "group/"))
-	// 	return
-	// }
 
 	var (
 		err error
@@ -97,30 +84,32 @@ func (hs *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func initTransport() (*kelips.UDPTransport, error) {
+
+	udpAddr, err := net.ResolveUDPAddr("udp", *advAddr)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return kelips.NewUDPTransport(conn), nil
+}
+
 func main() {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 	log.SetPrefix("| " + *advAddr + " | ")
 
-	conf := initConf()
-
-	udpAddr, err := net.ResolveUDPAddr("udp", *advAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	conn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	trans := kelips.NewUDPTransport(conn)
-
+	conf := kelips.DefaultConfig(*advAddr)
+	trans, err := initTransport()
 	//	coords, _ := vivaldi.NewClient(vivaldi.DefaultConfig())
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	if err != nil {
+		log.Fatal(err)
+	}
 	kelps := kelips.Create(conf, trans)
-
 	log.Println("Started cluster on", *advAddr)
 
 	// peers := parsePeers()

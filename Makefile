@@ -3,7 +3,7 @@
 NAME = kelipsd
 
 clean:
-	rm -v $(NAME)
+	rm -f $(NAME)
 
 deps:
 	go get -d -v .

@@ -4,11 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
+	"log"
 	"net"
 	"strconv"
 	"sync"
-
-	"github.com/hexablock/log"
 )
 
 // TupleHost is the host port of a key tuple
