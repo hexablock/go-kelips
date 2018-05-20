@@ -152,22 +152,6 @@ type localGroup struct {
 	trans Transport
 }
 
-func (lrpc *localGroup) Delete(key []byte, tuple TupleHost, propogate bool) error {
-	ok := lrpc.tuples.DeleteKeyHost(key, tuple)
-	if ok && propogate {
-		prop := &propReq{
-			typ:   0,
-			key:   make([]byte, len(key)),
-			tuple: make([]byte, len(tuple)),
-		}
-		copy(prop.key, key)
-		copy(prop.tuple, tuple)
-
-		lrpc.propReqs <- prop
-	}
-	return nil
-}
-
 func (lrpc *localGroup) Insert(key []byte, tuple TupleHost, propogate bool) error {
 	err := lrpc.tuples.Insert(key, tuple)
 	if err == nil && propogate {
@@ -247,13 +231,29 @@ func (lrpc *localGroup) Lookup(key []byte) ([]*kelipspb.Node, error) {
 	return nodes, nil
 }
 
+func (lrpc *localGroup) Delete(key []byte, tuple TupleHost, propogate bool) error {
+	ok := lrpc.tuples.DeleteKeyHost(key, tuple)
+	if ok && propogate {
+		prop := &propReq{
+			typ:   0,
+			key:   make([]byte, len(key)),
+			tuple: make([]byte, len(tuple)),
+		}
+		copy(prop.key, key)
+		copy(prop.tuple, tuple)
+
+		lrpc.propReqs <- prop
+	}
+	return nil
+}
+
 func (lrpc *localGroup) Snapshot() *kelipspb.Snapshot {
 	snapshot := &kelipspb.Snapshot{
 		Tuples: make([]*kelipspb.Tuple, 0, lrpc.tuples.Count()),
 		Nodes:  make([]*kelipspb.Node, 0, lrpc.groups.nodeCount()),
 	}
 
-	// handle all tuples
+	// Handle all tuples
 	lrpc.tuples.Iter(func(key []byte, hosts []TupleHost) bool {
 		tuple := &kelipspb.Tuple{Key: key, Hosts: make([][]byte, 0, len(hosts))}
 		for _, h := range hosts {
@@ -269,32 +269,6 @@ func (lrpc *localGroup) Snapshot() *kelipspb.Snapshot {
 	})
 
 	return snapshot
-}
-
-func (lrpc *localGroup) propogateDelete(key []byte, tuple TupleHost, nodes []kelipspb.Node) {
-	var err error
-	for _, node := range nodes {
-		naddr := node.Address.String()
-		if naddr == lrpc.local.Address.String() {
-			continue
-		}
-		if err = lrpc.trans.Delete(naddr, key, tuple, false); err != nil {
-			log.Printf("[ERROR] Failed to propogate: %s host=%s key=%x", err, naddr, key)
-		}
-	}
-}
-
-func (lrpc *localGroup) propogateInsert(key []byte, tuple TupleHost, nodes []kelipspb.Node) {
-	for _, node := range nodes {
-		naddr := node.Address.String()
-		if naddr == lrpc.local.Address.String() {
-			continue
-		}
-		if err := lrpc.trans.Insert(naddr, key, tuple, false); err != nil {
-			log.Printf("[ERROR] Failed to propogate insert: %v host=%s key=%x",
-				err, naddr, key)
-		}
-	}
 }
 
 // propogate inserts and deletes to the remaining group nodes
@@ -313,14 +287,56 @@ func (lrpc *localGroup) propogate(hashFunc func() hash.Hash) {
 		switch prop.typ {
 		case 0:
 			lrpc.propogateDelete(prop.key, prop.tuple, nodes)
+
 		case 1:
 			lrpc.propogateInsert(prop.key, prop.tuple, nodes)
+
 		default:
-			// unrecognized
 			log.Printf("[ERROR] Unrecognized propogation request: %d", prop.typ)
+			continue
+
+		}
+
+	}
+}
+
+func (lrpc *localGroup) propogateDelete(key []byte, tuple TupleHost, nodes []kelipspb.Node) {
+	for _, node := range nodes {
+		naddr := node.Address.String()
+		if naddr == lrpc.local.Address.String() {
 			continue
 		}
 
+		go lrpc.remoteDelete(naddr, key, tuple)
+
+	}
+}
+
+func (lrpc *localGroup) remoteDelete(a string, k []byte, t TupleHost) {
+	err := lrpc.trans.Delete(a, k, t, false)
+	if err != nil {
+		log.Printf("[ERROR] Failed to propogate delete: %s host=%s key=%x",
+			err, a, k)
+	}
+}
+
+func (lrpc *localGroup) propogateInsert(key []byte, tuple TupleHost, nodes []kelipspb.Node) {
+	for _, node := range nodes {
+		naddr := node.Address.String()
+		if naddr == lrpc.local.Address.String() {
+			continue
+		}
+
+		go lrpc.remoteInsert(naddr, key, tuple)
+
+	}
+}
+
+func (lrpc *localGroup) remoteInsert(a string, k []byte, t TupleHost) {
+	err := lrpc.trans.Insert(a, k, t, false)
+	if err != nil {
+		log.Printf("[ERROR] Failed to propogate insert: %v host=%s key=%x",
+			err, a, k)
 	}
 }
 
